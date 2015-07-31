@@ -123,11 +123,6 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
             compound='left', value='opal', command=self.setResource_cb, indicatoron=False, **self.BORDER)
         self.b3.pack(side='left')
         self.b3.configure(width=128, state='disabled')
-        
-        self.b4 = tk.Radiobutton(frame, text='   gUse\n   Cloud', variable=self._res_var, image=self._ICON_cluster,
-            compound='left', value='cloud', command=self.setResource_cb, indicatoron=False, **self.BORDER)
-        self.b4.configure(width=128)
-        self.b4.pack(side='left', anchor='center',padx=1)
 
         frame.pack(side='top', expand=0, anchor='n')
         group.pack(fill='none',expand=0,anchor='center',side='top',padx=5, pady=5, ipadx=5,ipady=5)
