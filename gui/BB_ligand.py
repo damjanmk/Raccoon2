@@ -52,6 +52,7 @@ import sys, time
 # mgl modules
 from mglutil.events import Event, EventHandler
 from mglutil.util.callback import CallbackFunction #as cb
+import zipfile #from zipfile import ZipFile
 
 
 
@@ -252,21 +253,24 @@ class LigandTab(rb.TabBase, rb.RaccoonDefaultWidget):
 
     def _call_lib_manager(self, event=None):
         """ """
+        #damjan begin
         # test if there's a server
-        if self.app.server == None:
-            title ='No server selected'
-            msg = ('Connect to a server in the Setup tab '
+        if self.app.server == None and self.app.guse == None:
+            title ='No server or gUSE resource selected'
+            msg = ('Connect to a server or gUSE resource in the Setup tab '
                    'to upload new libraries...')
             tmb.showinfo(parent = self.frame, title = title, message = msg)
             return
         # test if it is racconized
-        if not self.app.server.properties['ready']:
-            title ='Server is not ready'
-            msg = ('The server has not been prepared ("racconized") yet.\n\n'
-                   'Prepare it in the Setup tab and try again.')
-            tmb.showinfo(parent = self.frame, title = title, message = msg)
-            return
+        if not self.app.server == None:
+            if not self.app.server.properties['ready']:
+                title ='Server is not ready'
+                msg = ('The server has not been prepared ("racconized") yet.\n\n'
+                       'Prepare it in the Setup tab and try again.')
+                tmb.showinfo(parent = self.frame, title = title, message = msg)
+                return
         # test if there is an upload service
+        #damjan end
         # XXX TODO XXX
         LibraryManagerWin(self.app, self.frame)
 
@@ -461,10 +465,17 @@ class LibraryManagerWin(rb.RaccoonDefaultWidget):
         self.fmanager.pack(expand=1, fill='both', anchor='n', side='top',padx=2, pady=1)
         delkey = CallbackFunction(self.delete, **{'nuke':False})
         self.fmanager.component('listbox').bind('<Delete>', delkey)
-
-        self.uploadButton = tk.Button(self.center.interior(), text='Upload...', width=400,
-            image=self._ICON_upload, compound='left', command=self.ask_upload,
+        
+        #damjan begin
+        if not self.app.guse == None:
+            self.uploadButton = tk.Button(self.center.interior(), text='Prepare for gUSE', width=400,
+            image=self._ICON_upload, compound='left', command=self.prepare_ligands_for_guse,
             font=self.FONT, state='disabled', **self.BORDER)
+        else:
+            self.uploadButton = tk.Button(self.center.interior(), text='Upload...', width=400,
+            image=self._ICON_upload, compound='left', command=self.ask_upload,
+            font=self.FONT, state='disabled', **self.BORDER)            
+        #damjan end
         self.uploadButton.pack(anchor='s', side='bottom', expand=0, fill='x',padx=2, pady=2)
 
         self.center.pack(expand=1, fill='both', side='left',anchor='n',padx=3)
@@ -664,7 +675,57 @@ class LibraryManagerWin(rb.RaccoonDefaultWidget):
                 return
         self.app.engine.removeLigands()
         self.win.deactivate()
-
+    #damjan begin    
+    def path_leaf(self, path):
+        import ntpath
+        head, tail = ntpath.split(path)
+        return tail or ntpath.basename(head)
+    
+    def prepare_ligands_for_guse(self):        
+        """prepare for gUSE"""
+        if len(self._ligand_list) == 0:
+            return
+        
+        class Library():
+            def __init__(self, ligands, name = 'noname'):                
+                self.info = { 'name'   : name,
+                              'count'  : 0,
+                              'date'   : None,
+                              'format' : None,
+                              'index_file': None,
+                              'comments': "",
+                              'properties' : {},
+                              'type' : None,
+                            }
+                self.ligands = ligands
+        
+            def name(self):
+                """ used for sorting libraries """
+                return self.info['name']
+            def get_ligands(self):
+                return self.ligands
+        
+        lll = Library(list(self._ligand_list))
+        self.app.ligand_source = [ {'lib': lll, 'filters' : None } ]
+        
+        zligands = zipfile.ZipFile('../ligands.zip', 'w')
+        try:
+            for ligand in self._ligand_list:
+                zligands.write(ligand, arcname=self.path_leaf(ligand))            
+            zligands.close()
+            title ='Ligands prepared successfully'
+            msg = ('The ligands have been prepared succesfully.')
+            tmb.showinfo(parent = self.win.interior(), title = title, message = msg)           
+            
+            del self._ligand_list[:]
+            e = RaccoonEvents.UserInputRequirementUpdate('lig')
+            self.app.eventManager.dispatchEvent(e)
+        except:
+            title ='Error while preparing ligands for gUSE'
+            msg = ('There was an error while uploading the ligands, make sure they are named correctly.')
+            tmb.showinfo(parent = self.win.interior(), title = title, message = msg)
+            self.destroy()
+    #damjan end
 
     def ask_upload(self):
         """upload to remote location"""
