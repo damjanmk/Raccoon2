@@ -123,7 +123,12 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
             compound='left', value='opal', command=self.setResource_cb, indicatoron=False, **self.BORDER)
         self.b3.pack(side='left')
         self.b3.configure(width=128, state='disabled')
-
+        #damjan  begin              
+        self.b4 = tk.Radiobutton(frame, text='   gUse\n   (Cloud)', variable=self._res_var, image=self._ICON_cluster,
+            compound='left', value='guse', command=self.setResource_cb, indicatoron=False, **self.BORDER)
+        self.b4.configure(width=128)
+        self.b4.pack(side='left', anchor='center',padx=1)
+        #damjan end    
         frame.pack(side='top', expand=0, anchor='n')
         group.pack(fill='none',expand=0,anchor='center',side='top',padx=5, pady=5, ipadx=5,ipady=5)
 
@@ -158,6 +163,10 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
             self.setClusterResource()
         elif self.resource == 'opal':
             self.setOpalResource()
+        #damjan begin
+        elif self.resource == 'guse':
+            self.setGuseResource()
+        #damjan end
 
     def initIcons(self):
         """ initialize the icons for the interface"""
@@ -298,6 +307,149 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
 
         return data
 
+#damjan begin
+############## GUSE & CLOUD SECTION
+    def setGuseResource(self):
+        """ master function to be called when resource is set to gUSE"""        
+        self.resetFrame()
+        self._makeguseinfopanel()
+        
+    lblGuseUsername = ""
+    def _makeguseinfopanel(self):
+        """ create the panels containing all info about
+            the gUSE configuration
+        """
+        ### info panel
+        group = Pmw.Group(self.frame, tag_text = 'gUSE', tag_font=self.FONTbold)
+        g = group.interior()
+        self._makegusetoolbar(g)
+    
+        # left top frame
+        self.f1 = tk.Frame(g, borderwidth=1, relief=tk.RAISED)        
+        table = tk.Frame(self.f1, borderwidth=2, relief=tk.RAISED)
+                
+        self.GuseCredentialsId = tk.StringVar()
+        self.GuseRemoteAPIURL = tk.StringVar()
+        tk.Label(table, text="RemoteAPI URL").grid(row=1, column=0, sticky=tk.E, pady=(4, 4), padx=(0, 46))
+        tk.Entry(table, textvariable=self.GuseRemoteAPIURL, width=70).grid(row=1, column=1, padx=(10, 3), sticky=tk.W)
+        tk.Label(table, text="Credential ID").grid(row=2, column=0, sticky=tk.E, pady=(4, 4), padx=(0, 46))
+        tk.Entry(table, show="*", textvariable=self.GuseCredentialsId, width=70).grid(row=2, column=1, padx=(10, 3), sticky=tk.W)        
+                
+        table.pack(side='top', anchor='n',padx=3,pady=10)
+    
+        f3 = tk.Frame(self.f1, borderwidth=1, relief=tk.RAISED)
+        self.GuseRemoteAPIPassword = tk.StringVar()
+        self.GusePortalUsername = tk.StringVar()
+        self.GusePortalPassword = tk.StringVar()
+        tk.Label(f3, text="RemoteAPI password ").grid(row=1, column=0, sticky=tk.E, pady=(4, 4))
+        tk.Entry(f3, show="*", textvariable=self.GuseRemoteAPIPassword, width=70).grid(row=1, column=1, padx=(10, 3), sticky=tk.W)
+        
+        tk.Label(f3, text="Authentication type ").grid(row=2, column=0, sticky=tk.E, pady=(4, 4))
+        guseAuthenticationTypes = ["<choose authentication>", "Basic"]
+                
+        self.guseAuthenticationType = tk.StringVar()
+        self.guseAuthenticationType.set(guseAuthenticationTypes[0]) # default value
+        
+        w = tk.OptionMenu(f3, self.guseAuthenticationType, *guseAuthenticationTypes, command=self.chooseGuseAuthentication)        
+        w.grid(row=2, column=1, padx=(10, 3), sticky=tk.W)
+        
+        self.lblGuseUsername = tk.Label(f3, text="gUSE username ")
+        self.lblGuseUsername.grid(row=3, column=0, sticky=tk.E, pady=(4, 4))
+        self.txtGuseUsername = tk.Entry(f3, textvariable=self.GusePortalUsername, width=70)
+        self.txtGuseUsername.grid(row=3, column=1, padx=(10, 3), sticky=tk.W)
+        self.lblGusePassword = tk.Label(f3, text="gUSE password ")
+        self.lblGusePassword.grid(row=4, column=0, sticky=tk.E, pady=(4, 4))
+        self.txtGusePassword = tk.Entry(f3, show="*", textvariable=self.GusePortalPassword, width=70)
+        self.txtGusePassword.grid(row=4, column=1, padx=(10, 3), sticky=tk.W)
+                    
+        f3.pack(side='bottom', anchor='n', padx=2,pady=7, expand=0,fill='none')
+    
+        self.f1.pack(side='left', anchor='n', expand=0, fill='none')
+        # bottom frame
+        group.pack(expand=1, fill='both',anchor='center', side='top',padx=5, pady=5)
+        self.frame.pack(expand=1, fill='both')
+        #print "Raccoon GUI resource:", self.app.resource
+                
+    def chooseGuseAuthentication(self, guse=None, event=None):
+        """manage the guse authentication type selection from pulldown"""
+        self.app.setBusy()
+        if guse == None:
+            guse = self.guseAuthentication.getvalue()
+        if guse == "<choose authentication>":
+            self.lblGuseUsername.grid_remove()
+            self.txtGuseUsername.grid_remove()
+            self.lblGusePassword.grid_remove()
+            self.txtGusePassword.grid_remove()
+        elif guse == "Basic":
+            self.lblGuseUsername.grid()
+            self.txtGuseUsername.grid()
+            self.lblGusePassword.grid()
+            self.txtGusePassword.grid()
+        self.app.setReady()    
+        
+    def _makegusetoolbar(self, target):
+        """ create the widgets to set/configure the gUSE"""
+
+        f = tk.Frame(target)
+        # pulldown
+        self.guseChooser = OptionMenuFix(f, labelpos='w', menubutton_width=40,
+                            label_text = 'Resource Type  ',
+                            label_font = self.FONT,
+                            menubutton_font = self.FONT,
+                            menu_font = self.FONT,
+                            command = self.chooseGuse,
+                            menubutton_bd = 1, menubutton_highlightbackground = 'black',
+                            menubutton_borderwidth=1, menubutton_highlightcolor='black', 
+                            menubutton_highlightthickness = 1,
+                            menubutton_height=1,
+                            )
+
+        self.guseChooser_NULL = '<no servers>'
+
+        #self.app.eventManager.registerListener(RaccoonEvents.UpdateServerListEvent, self._populateservertoolbar)
+
+        self.guseChooser.pack(expand=1, fill='x', anchor='center', side='left')
+        
+        f.pack(expand=0, fill='none', anchor='w',side='top', padx=3, pady=3)
+        self._populategusetoolbar()
+    
+    def _populategusetoolbar(self, event=None):
+        """ add resource types to the list of optionmenu"""
+        gUseResourceTypes = ["Cloud"];
+        guseTypes = gUseResourceTypes;
+        if len(guseTypes) == 0:
+            self.guseChooser_NULL = '<no guse Types>'
+            guseTypes = [self.guseChooser_NULL]
+        else:
+            self.guseChooser_NULL = '<choose a guse Types...>'
+            guseTypes = [self.guseChooser_NULL]+guseTypes
+        self.guseChooser.setitems(guseTypes)
+        if not self.app.guse == None:
+            self.guseChooser.setitems(guseTypes)
+        else:
+            self.guseChooser.setvalue(self.guseChooser_NULL) 
+    
+    def chooseGuse(self, guse=None, event=None):
+        """manage the guse type selection from pulldown"""
+        self.app.setBusy()
+        if guse == None:
+            guse = self.guseChooser.getvalue()
+        if guse == self.guseChooser_NULL:
+            self.f1.pack_forget()
+            self.app.setReady()
+        elif guse == "Cloud":
+            self.f1.pack(side='left', anchor='n', expand=0, fill='none')
+                        
+            self.guseAuthenticationType.set("Basic")           
+            self.app.guse = self.guseChooser.getvalue()
+            self.app.engine.guseRemoteAPIURL = self.GuseRemoteAPIURL.get()
+            self.app.engine.guseCredentialsId = self.GuseCredentialsId.get()
+            self.app.engine.guseRemoteAPIPassword = self.GuseRemoteAPIPassword.get()
+            self.app.engine.gusePortalUsername = self.GusePortalUsername.get()
+            self.app.engine.gusePortalPassword = self.GusePortalPassword.get()
+        self.app.setReady()
+    
+#damjan end
 
 
 ############## CLUSTER SECTION
@@ -364,7 +516,6 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
         """
         e = RaccoonEvents.ServerConnection()
         self.app.eventManager.dispatchEvent(e)
-
 
     def _populateservertoolbar(self, event=None):
         """ add servers to the list of optionmenu"""
@@ -1917,7 +2068,3 @@ class LinkPrompt:
                 m = 'Check the URL inserted and try again\n\n(or press Cancel)'
                 i = 'warning'
                 tmb.showinfo(parent = self.dialog, title=t, message=m, icon=i)
-
-
-
-    
