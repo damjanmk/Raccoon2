@@ -103,6 +103,9 @@ class RaccoonMaster(DebugTools.DebugObj):
         # server object to wich we're connected
         # this should be one of RaccoonRemoteServer ('ssh'), RaccoonOpalServer ('opal') or 
         # RaccoonLocalServer ('local') objects
+        #damjan begin
+        self.guse = None
+        #damjan end
         self.server = None
 
         self.history = {}
