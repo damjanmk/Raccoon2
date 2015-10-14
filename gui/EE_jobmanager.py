@@ -30,6 +30,12 @@
 #
 
 import CADD.Raccoon2
+#damjan imports
+import datetime
+import subprocess
+from time import sleep
+from zipfile import ZipFile
+
 import RaccoonBasics as rb
 import RaccoonEvents
 import RaccoonServers
@@ -45,11 +51,8 @@ from PIL import Image, ImageTk
 # mgl modules
 from mglutil.events import Event, EventHandler
 from mglutil.util.callback import CallbackFunction # as cb
-
+from compiler.pycodegen import TRY_FINALLY
 #import EF_resultprocessor 
-
-
-
 class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
     """ populate and manage the job manager tab """
     
@@ -66,16 +69,33 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         self.app.eventManager.registerListener(RaccoonEvents.ServiceSelected, self.updateRequirements) # docking service is selected 
         self.app.eventManager.registerListener(RaccoonEvents.UserInputRequirementUpdate, self.updateRequirements) # data input (lig,rec...)
         self.app.eventManager.registerListener(RaccoonEvents.SearchConfigChange, self.updateRequirements) # search config change (box)
-        self._buildjobman(self.parent)
+        if self.resource == "guse":
+            self._buildjobscrollbar()
+        else:
+            self._buildjobman(self.parent)
 
     def _buildjobman(self, target):
-        """ build the job manager tree"""
-        pgroup = Pmw.Group(target, tag_text = 'Jobs', tag_font=self.FONTbold)
+        """ build the job manager tree"""        
+        if hasattr(self, 'pgroup'):
+            self.pgroup.pack_forget()        
+        self.pgroup = Pmw.Group(target, tag_text = 'Jobs', tag_font=self.FONTbold)
         #tk.Button(pgroup.interior(), text='Refresh', image='self.'
-        self.jobtree = RaccoonProjManTree.VSresultTree(pgroup.interior(), app = self.app, iconpath=self.iconpath)
-        pgroup.pack(expand=1, fill='both', anchor='n', side='bottom')
+        self.jobtree = RaccoonProjManTree.VSresultTree(self.pgroup.interior(), app = self.app, iconpath=self.iconpath)
+        self.pgroup.pack(expand=1, fill='both', anchor='n', side='bottom')
         self.initJobTree()
 
+    def _buildjobscrollbar(self):
+        self.pgroup.pack_forget()
+        self.pgroup = Pmw.Group(self.parent, tag_text = 'Jobs', tag_font=self.FONTbold)
+        scrollbar = tk.Scrollbar(self.pgroup.interior())
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.jobResultListbox = tk.Listbox(self.pgroup.interior())
+        self.jobResultListbox.pack(fill=tk.BOTH, expand=1)
+        # attach listbox to scrollbar
+        self.jobResultListbox.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=self.jobResultListbox.yview)
+        self.pgroup.pack(expand=1, fill='both', anchor='n', side='bottom')
 
     def initJobTree(self, event=None):
         """ populate the tree with the history filer"""
@@ -104,7 +124,55 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
             self.setClusterResource()
         elif resource == 'opal':
             self.setOpalResource()
+    #damjan begin
+        elif resource == 'guse':
+            self.setGuseResource()
+           
 
+    def setGuseResource(self):
+        self._buildjobscrollbar()
+        self.resetFrame()
+        self.group = Pmw.Group(self.frame, tag_text = 'gUSE submission requirements', tag_font=self.FONTbold)
+        f = self.group.interior()
+        #f.configure(bg='red')
+
+        lwidth = 20
+        rwidth = 60
+        lbg = '#ffffff'
+        rbg = '#ff8888'
+        fg = 'black'
+
+        # ligands
+        tk.Label(f, text='Ligands', width=lwidth, font=self.FONT,anchor='e').grid(row=3, column=1,sticky='e',padx=5, pady=1)
+        self.reqLig = tk.Label(f, text = '[ click to select ]', fg = fg, bg=rbg, width=rwidth, font=self.FONT, **self.BORDER)
+        self.reqLig.grid(row=3,column=2, sticky='w', pady=1)
+        cb = CallbackFunction(self.switchtab, 'Ligands')
+        self.reqLig.bind('<Button-1>', cb)
+
+        # receptor
+        tk.Label(f, text='Receptors', width=lwidth, font=self.FONT,anchor='e').grid(row=5, column=1,sticky='e',padx=5, pady=0)
+        self.reqRec = tk.Label(f, text = '[ click to select ]', fg = fg, bg=rbg, width=rwidth, font=self.FONT, **self.BORDER)
+        self.reqRec.grid(row=5,column=2, sticky='w')
+        cb = CallbackFunction(self.switchtab, 'Receptors')
+        self.reqRec.bind('<Button-1>', cb)
+
+        # config
+        tk.Label(f, text='Config', width=lwidth, font=self.FONT,anchor='e').grid(row=7, column=1,sticky='e',padx=5, pady=1)
+        self.reqConf = tk.Label(f, text = '[ click to select ]', fg = fg, bg=rbg, width=rwidth, font=self.FONT, **self.BORDER)
+        self.reqConf.grid(row=7,column=2, sticky='w', pady=1)
+        cb = CallbackFunction(self.switchtab, 'Config')
+        self.reqConf.bind('<Button-1>', cb)
+
+        # submission
+        self.SubmitButton = tk.Button(f, text = 'Submit...', image=self._ICON_submit, 
+            font=self.FONT, compound='left',state='disabled', command=self.submit, **self.BORDER)
+        self.SubmitButton.grid(row=20, column=1, sticky='we', columnspan=3, padx=4, pady=3)
+
+        self.group.pack(fill='none',side='top', anchor='w', ipadx=5, ipady=5)
+
+        self.frame.pack(expand=0, fill='x',anchor='n')
+        self._updateRequirementsGuse()
+    #damjan end 
     def setLocalResource(self):
         #self.frame.pack_forget()
         self.resetFrame()
@@ -120,6 +188,7 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         #print "Raccoon GUI job manager is now on :", self.app.resource
 
     def setClusterResource(self):
+        self._buildjobman(self.parent)
         self.resetFrame()
 
         #self.frame.configure(bg='red')
@@ -212,9 +281,18 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
             self._updateRequirementsSsh(event)
         elif self.app.resource == 'opal':
             self._updateRequirementsOpal(event)
+        #damjan begin
+        elif self.app.resource == 'guse':
+            self._updateRequirementsGuse(event)
+        #damjan end
     
     def submit(self, event=None, suggest={}):
         """ find out which EVENT should be triggered and how"""
+        #damjan begin
+        if self.app.resource == 'guse':
+            self.submit_guse()
+            return
+        #damjan end
         jsub = JobSubmissionInterface(self.frame, jmanager=self.jobtree, app = self.app, suggest=suggest)
         job_info = jsub.getinfo()
         self.app.setBusy()
@@ -226,9 +304,204 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         elif self.app.resource == 'cluster':
             self.submit_cluster(job_info)
         elif self.app.resource == 'opal':
-            self.submit_opal(job_info)
+            self.submit_opal(job_info)        
         self.app.setReady()
+    
+    def submit_guse(self):
+#         print "\nreceptors: "        
+        import zipfile
+        zreceptors = ZipFile("../receptors.zip", "w")
+        # rec
+        output_names_content = ""
+        i = 1
+        for r in self.app.engine.RecBook.keys():
+            #receptor_name = "receptor" + str(i)
+            zreceptors.write(self.app.engine.RecBook[r]['filename'], arcname=os.path.splitext(os.path.basename(self.app.engine.RecBook[r]['filename']))[0] + ".pdbqt")
+            i = i + 1
+            # ligand 
+            llib = self.app.ligand_source
+            for a in llib:
+                temp_lib = a['lib']
+                for b in temp_lib.get_ligands():
+                    output_names_content += os.path.splitext(os.path.basename(self.app.engine.RecBook[r]['filename']))[0] + "_" + os.path.splitext(os.path.basename(b))[0] + "_out.pdbqt" + os.linesep
+                    
+        zreceptors.close()
+        
+        o = open("../output_names.txt", "w")
+        o.write(output_names_content)
+        o.close()
+        
+        # conf
+#         print "\nconf: "
+#         print self.app.engine.vina_settings
+        config_content = ""
+        for keyword in self.app.engine.vina_settings["KEYWORD_ORDER"]:
+            if keyword == "cpu" or keyword == "out":
+                continue
+            if keyword in self.app.engine.vina_settings["OPTIONAL"]:
+                if self.app.engine.vina_settings["OPTIONAL"][keyword] == False:
+                    continue                    
+            else:
+                config_content += keyword + " = " + str(self.app.engine.vina_settings[keyword]) + os.linesep
+        f = open("../conf.txt", "w")
+        f.write(config_content)
+        f.close()
+        self.RunGuse(self.app.engine.guseCredentialsId, self.app.engine.guseRemoteAPIPassword, 
+                     self.app.engine.gusePortalUsername, self.app.engine.gusePortalPassword)
 
+
+    def prepareVinaOutputNamesZip(self):
+        zin = ZipFile('../gUSE-cloud-vina.zip', 'r')
+        zout = ZipFile('../gUSE-cloud-vina-new.zip', 'w')    
+        workflow_xml = zin.read('workflow.xml')    
+        zin.close()
+          
+        zout.writestr("workflow.xml", workflow_xml)  # , arcname="workflow.xml")#, compress_type=ZipFile.ZIP_DEFLATED)             
+        zout.write("../ligands.zip", arcname="vina_output_names/4in1out/inputs/0/0")  
+        zout.write("../receptors.zip", arcname="vina_output_names/4in1out/inputs/1/0")
+        zout.write("../conf.txt", arcname="vina_output_names/4in1out/inputs/2/0")
+        zout.write("../output_names.txt", arcname="vina_output_names/4in1out/inputs/3/0")
+        
+        zout.close()
+        
+        os.remove("../gUSE-cloud-vina.zip")
+        os.rename("../gUSE-cloud-vina-new.zip", "../gUSE-cloud-vina.zip")    
+    
+    def process_detailsinfo(self, wfstatus, startTime):    
+        i = 0
+        init = 0
+        running = 0
+        finished = 0
+        error = 0
+        returnVal = 0 # 0 - suspended, not valid data. 1 - finished, error. 2 - submitted, running.
+        for wfstatusSegment in wfstatus.split(";"):        
+            if i == 0:
+                if wfstatusSegment == "submitted":
+                    self.jobResultListbox.insert(tk.END, "Raccoon execution via gUSE submitted.")
+                    returnVal = 2
+                elif wfstatusSegment == "running":
+                    self.jobResultListbox.insert(tk.END, "Raccoon execution via gUSE running...")               
+                    returnVal = 2
+                elif wfstatusSegment == "finished":
+                    self.jobResultListbox.insert(tk.END, "Raccoon execution via gUSE finished successfully!")
+                    self.jobResultListbox.insert(tk.END, "Please open the folder \'gUSE-cloud-vina-filtered-results-\' + today\'s date (timestamp) to view the results.")
+                    returnVal = 1
+                elif wfstatusSegment == "error":
+                    self.jobResultListbox.insert(tk.END, "Part of the Raccoon execution on the cloud had errors.")
+                    returnVal = 1
+                elif wfstatusSegment == "suspended":
+                    self.jobResultListbox.insert(tk.END, "Raccoon execution via gUSE stopped by administrator")
+                elif wfstatusSegment == "not valid data":
+                    self.jobResultListbox.insert(tk.END, "Data for Raccoon execution via gUSE not valid")
+                currentTime = datetime.datetime.now()                
+                timeDifference = currentTime - startTime
+                self.jobResultListbox.insert(tk.END, "Execution time: " + str(timeDifference))
+            else:
+                for jobstatus in wfstatusSegment.split(":"):
+                    jobstatusList = jobstatus.split("=")            
+                    if jobstatusList[0] == "init":
+                        init = init + int(jobstatusList[1])
+                    elif jobstatusList[0] == "running":
+                        running = running + int(jobstatusList[1])
+                    elif jobstatusList[0] == "finished":
+                        finished = finished + int(jobstatusList[1])
+                    elif jobstatusList[0] == "error":
+                        error = error + int(jobstatusList[1])                    
+            i = i + 1
+        total = str(init + running + finished + error)    
+        if init > 0:
+            isare = "are"
+            if init == 1:
+                isare = "is"
+                self.jobResultListbox.insert(tk.END, str(init) + "/" + total + " jobs " + isare + " initialising...")
+            
+        if running > 0:
+            isare = "are"
+            if running == 1:
+                isare = "is"
+            self.jobResultListbox.insert(tk.END,  str(running) + "/" + total + " jobs " + isare + " running...")
+        if finished > 0:
+            hashave = "have"
+            if finished == 1:
+                hashave = "has"
+            self.jobResultListbox.insert(tk.END,  str(finished) + "/" + total + " jobs " + hashave + " finished.")
+        if error > 0:        
+            self.jobResultListbox.insert(tk.END,  str(error) + "/" + total + " jobs had some errors.")
+        
+        self.jobResultListbox.see(tk.END)    # scroll down automatically
+        #self.jobResultListbox.insert(tk.END,  wfstatus + os.linesep)
+        print wfstatus
+        self.frame.update()
+        return returnVal
+    
+    
+    def RunGuse(self, CredentialsId, RemoteAPIPassword, PortalUsername, PortalPassword):        
+        
+        url = self.app.engine.guseRemoteAPIURL
+        password = RemoteAPIPassword
+      
+        # make certs.zip
+        GuseAuthenticationFileName = 'x509up.' + CredentialsId
+        authenticationFile = open(GuseAuthenticationFileName, 'w')
+        authenticationFile.write("password=" + PortalPassword + os.linesep + "username=" + PortalUsername)
+        authenticationFile.close()
+        GuseCertsZip = ZipFile("../certs.zip", 'w')
+        GuseCertsZip.write(GuseAuthenticationFileName)
+        GuseCertsZip.close()
+        os.remove(GuseAuthenticationFileName)
+         
+        self.prepareVinaOutputNamesZip()    
+        workflowZip = "gUSE-cloud-vina.zip"
+            
+        self.jobResultListbox.insert(tk.END, "Submitting " + workflowZip + " via gUSE")
+        self.frame.update()                
+        guse_submit = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=submit', '-F', 'pass=' + password, '-F', 'gusewf=@' + workflowZip, '-F', 'certs=@certs.zip', url])
+        wfid = guse_submit.rstrip()        
+        print 'wfid = ' + wfid
+        currentTime = datetime.datetime.now()     
+        print currentTime
+        while True:
+            guse_info = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=detailsinfo', '-F', 'pass=' + password, '-F', 'ID=' + wfid, url])
+            wfstatus = guse_info.rstrip()            
+            wfstate = self.process_detailsinfo(wfstatus, currentTime)
+            #break
+            if wfstate == 0:
+                break
+            elif wfstate == 1:
+                    with open('../gUSE-cloud-vina-results.zip', "w") as redirect_to_file:
+                        subprocess.call(['curl', '-k', '-s', '-S', '-F', 'm=download', '-F', 'pass=' + password, '-F', 'ID=' + wfid, url], stdout=redirect_to_file)
+                    
+                    timestamp = datetime.datetime.now().strftime("%d-%m-%y--%H-%M-%S-%f")
+                    
+                    z = ZipFile('../gUSE-cloud-vina-results.zip', 'r')
+                    temporary_folder = "res" + timestamp
+                    os.mkdir(temporary_folder)
+                    z.extractall(temporary_folder, filter(lambda f: f.endswith('output.zip'), z.namelist()))
+                    output_zip_name_path = ""
+                    for name in z.namelist():
+                        if name.endswith("output.zip"):
+                            output_zip_name_path = name
+                    z.close()
+                    
+                    z = ZipFile(temporary_folder + os.sep + output_zip_name_path)
+                    results_folder = "../gUSE-cloud-vina-results-" + timestamp
+                    os.mkdir(results_folder)
+                    z.extractall(results_folder, filter(lambda f: f.endswith(('.pdbqt_log.txt', '.pdbqt')), z.namelist()))
+                    z.close()
+                    
+                    os.remove(temporary_folder + os.sep + output_zip_name_path)
+                    last_separator = output_zip_name_path.rfind(os.sep)
+                    os.removedirs(temporary_folder + os.sep + output_zip_name_path[0:last_separator])
+
+                    os.remove("../ligands.zip")
+                    os.remove("../receptors.zip")
+                    os.remove("../conf.txt")
+                    os.remove("../output_names.txt")
+                    os.remove("../certs.zip")    
+                    break                        
+            else:            
+                sleep(20)
+    
     def submit_local(self, job_info):
         """ manage submission and feedback from local resource"""
         report = self.app.submitLocal(job_info)
@@ -285,7 +558,43 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         _type = event._type
         pass
 
+    def _updateRequirementsGuse(self, event=None):
+        g = 'black'
+        r = 'red'
+        d = '[ click to select ]'
+        green = '#99ff44'
+        red = '#ff4444'
+        orange = '#ffcc44'
 
+        missing = False
+                
+        # ligand 
+        if len(self.app.ligand_source):
+            libnames = ",".join([x['lib'].name() for x in self.app.ligand_source])
+            t = "library selected (%s)" % libnames
+            self.reqLig.configure(fg = g, text = t, bg = green)
+        else:
+            missing = True
+            self.reqLig.configure(fg = g, text = d, bg = red)
+        # rec
+        if len(self.app.engine.receptors()) > 0:
+            t = "%s receptors selected" % len(self.app.engine.receptors())
+            self.reqRec.configure(fg = g, text = t, bg = green)
+        else:
+            missing = True
+            self.reqRec.configure(fg = g, text = d, bg = red)
+        # conf
+        conf = self.app.engine.gridBox()
+        if not None in conf['center'] + conf['size']:
+            t = "search box defined"
+            self.reqConf.configure(fg = g, text = t, bg = green)
+            c = g
+        else:
+            missing = True
+            self.reqConf.configure(fg = g, text = d, bg = red)
+        if not missing:
+            self.SubmitButton.configure(state='normal')
+    
     def _updateRequirementsSsh(self, event=None):
         """ update the check for requirements 
             of ssh submission
