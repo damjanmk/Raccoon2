@@ -455,7 +455,7 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
             
         self.jobResultListbox.insert(tk.END, "Submitting " + workflowZip + " via gUSE")
         self.frame.update()                
-        guse_submit = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=submit', '-F', 'pass=' + password, '-F', 'gusewf=@' + workflowZip, '-F', 'certs=@certs.zip', url])
+        guse_submit = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=submit', '-F', 'pass=' + password, '-F', 'gusewf=@../' + workflowZip, '-F', 'certs=@../certs.zip', url])
         wfid = guse_submit.rstrip()        
         print 'wfid = ' + wfid
         currentTime = datetime.datetime.now()     
