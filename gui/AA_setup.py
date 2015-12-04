@@ -325,46 +325,43 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
         self._makegusetoolbar(g)
     
         # left top frame
-        self.f1 = tk.Frame(g, borderwidth=1, relief=tk.RAISED)        
+        self.f1 = tk.Frame(g)        
         table = tk.Frame(self.f1, borderwidth=2, relief=tk.RAISED)
                 
-        self.GuseCredentialsId = tk.StringVar()
-        self.GuseRemoteAPIURL = tk.StringVar()
+        self.app.engine.guseRemoteAPIURL = tk.StringVar()
+        self.app.engine.guseCredentialsId = tk.StringVar()
         tk.Label(table, text="RemoteAPI URL").grid(row=1, column=0, sticky=tk.E, pady=(4, 4), padx=(0, 46))
-        tk.Entry(table, textvariable=self.GuseRemoteAPIURL, width=70).grid(row=1, column=1, padx=(10, 3), sticky=tk.W)
+        tk.Entry(table, textvariable=self.app.engine.guseRemoteAPIURL, width=70).grid(row=1, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
         tk.Label(table, text="Credential ID").grid(row=2, column=0, sticky=tk.E, pady=(4, 4), padx=(0, 46))
-        tk.Entry(table, show="*", textvariable=self.GuseCredentialsId, width=70).grid(row=2, column=1, padx=(10, 3), sticky=tk.W)        
+        tk.Entry(table, show="*", textvariable=self.app.engine.guseCredentialsId, width=70).grid(row=2, column=1, padx=(10, 3), sticky=tk.W, ipady=3)        
                 
         table.pack(side='top', anchor='n',padx=3,pady=10)
     
         f3 = tk.Frame(self.f1, borderwidth=1, relief=tk.RAISED)
-        self.GuseRemoteAPIPassword = tk.StringVar()
-        self.GusePortalUsername = tk.StringVar()
-        self.GusePortalPassword = tk.StringVar()
+        self.app.engine.guseRemoteAPIPassword = tk.StringVar()
+        self.app.engine.gusePortalUsername = tk.StringVar()
+        self.app.engine.gusePortalPassword = tk.StringVar()
         tk.Label(f3, text="RemoteAPI password ").grid(row=1, column=0, sticky=tk.E, pady=(4, 4))
-        tk.Entry(f3, show="*", textvariable=self.GuseRemoteAPIPassword, width=70).grid(row=1, column=1, padx=(10, 3), sticky=tk.W)
+        tk.Entry(f3, show="*", textvariable=self.app.engine.guseRemoteAPIPassword, width=70).grid(row=1, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
         
+        self.guseAuthenticationType = tk.StringVar()
         tk.Label(f3, text="Authentication type ").grid(row=2, column=0, sticky=tk.E, pady=(4, 4))
         guseAuthenticationTypes = ["<choose authentication>", "Basic"]
-                
-        self.guseAuthenticationType = tk.StringVar()
         self.guseAuthenticationType.set(guseAuthenticationTypes[0]) # default value
-        
         w = tk.OptionMenu(f3, self.guseAuthenticationType, *guseAuthenticationTypes, command=self.chooseGuseAuthentication)        
-        w.grid(row=2, column=1, padx=(10, 3), sticky=tk.W)
+        w.grid(row=2, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
         
         self.lblGuseUsername = tk.Label(f3, text="gUSE username ")
-        self.lblGuseUsername.grid(row=3, column=0, sticky=tk.E, pady=(4, 4))
-        self.txtGuseUsername = tk.Entry(f3, textvariable=self.GusePortalUsername, width=70)
-        self.txtGuseUsername.grid(row=3, column=1, padx=(10, 3), sticky=tk.W)
+        self.lblGuseUsername.grid(row=3, column=0, sticky=tk.E, pady=(4, 4), ipady=3)
+        self.txtGuseUsername = tk.Entry(f3, textvariable=self.app.engine.gusePortalUsername, width=70)
+        self.txtGuseUsername.grid(row=3, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
         self.lblGusePassword = tk.Label(f3, text="gUSE password ")
-        self.lblGusePassword.grid(row=4, column=0, sticky=tk.E, pady=(4, 4))
-        self.txtGusePassword = tk.Entry(f3, show="*", textvariable=self.GusePortalPassword, width=70)
-        self.txtGusePassword.grid(row=4, column=1, padx=(10, 3), sticky=tk.W)
+        self.lblGusePassword.grid(row=4, column=0, sticky=tk.E, pady=(4, 4), ipady=3)
+        self.txtGusePassword = tk.Entry(f3, show="*", textvariable=self.app.engine.gusePortalPassword, width=70)
+        self.txtGusePassword.grid(row=4, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
                     
         f3.pack(side='bottom', anchor='n', padx=2,pady=7, expand=0,fill='none')
     
-        self.f1.pack(side='left', anchor='n', expand=0, fill='none')
         # bottom frame
         group.pack(expand=1, fill='both',anchor='center', side='top',padx=5, pady=5)
         self.frame.pack(expand=1, fill='both')
@@ -408,9 +405,9 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
 
         #self.app.eventManager.registerListener(RaccoonEvents.UpdateServerListEvent, self._populateservertoolbar)
 
-        self.guseChooser.pack(expand=1, fill='x', anchor='center', side='left')
+        self.guseChooser.pack()
         
-        f.pack(expand=0, fill='none', anchor='w',side='top', padx=3, pady=3)
+        f.pack(side='top', anchor='center', expand=0, fill='x', pady=10)
         self._populategusetoolbar()
     
     def _populategusetoolbar(self, event=None):
@@ -438,15 +435,9 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
             self.f1.pack_forget()
             self.app.setReady()
         elif guse == "Cloud":
-            self.f1.pack(side='left', anchor='n', expand=0, fill='none')
-                        
-            self.guseAuthenticationType.set("Basic")           
+            self.f1.pack(side='top', anchor='center', expand=0, fill='x')
+            self.guseAuthenticationType.set("Basic")
             self.app.guse = self.guseChooser.getvalue()
-            self.app.engine.guseRemoteAPIURL = self.GuseRemoteAPIURL.get()
-            self.app.engine.guseCredentialsId = self.GuseCredentialsId.get()
-            self.app.engine.guseRemoteAPIPassword = self.GuseRemoteAPIPassword.get()
-            self.app.engine.gusePortalUsername = self.GusePortalUsername.get()
-            self.app.engine.gusePortalPassword = self.GusePortalPassword.get()
         self.app.setReady()
     
 #damjan end
