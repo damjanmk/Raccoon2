@@ -346,8 +346,8 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         f = open("../conf.txt", "w")
         f.write(config_content)
         f.close()
-        self.RunGuse(self.app.engine.guseCredentialsId, self.app.engine.guseRemoteAPIPassword, 
-                     self.app.engine.gusePortalUsername, self.app.engine.gusePortalPassword)
+        self.RunGuse(self.app.engine.guseRemoteAPIURL.get(), self.app.engine.guseCredentialsId.get(), self.app.engine.guseRemoteAPIPassword.get(), 
+                     self.app.engine.gusePortalUsername.get(), self.app.engine.gusePortalPassword.get())
 
 
     def prepareVinaOutputNamesZip(self):
@@ -435,11 +435,7 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         return returnVal
     
     
-    def RunGuse(self, CredentialsId, RemoteAPIPassword, PortalUsername, PortalPassword):        
-        
-        url = self.app.engine.guseRemoteAPIURL
-        password = RemoteAPIPassword
-      
+    def RunGuse(self, gUSEurl, CredentialsId, RemoteAPIPassword, PortalUsername, PortalPassword):        
         # make certs.zip
         GuseAuthenticationFileName = 'x509up.' + CredentialsId
         authenticationFile = open(GuseAuthenticationFileName, 'w')
@@ -455,13 +451,13 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
             
         self.jobResultListbox.insert(tk.END, "Submitting " + workflowZip + " via gUSE")
         self.frame.update()                
-        guse_submit = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=submit', '-F', 'pass=' + password, '-F', 'gusewf=@../' + workflowZip, '-F', 'certs=@../certs.zip', url])
+        guse_submit = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=submit', '-F', 'pass=' + RemoteAPIPassword, '-F', 'gusewf=@../' + workflowZip, '-F', 'certs=@../certs.zip', gUSEurl])
         wfid = guse_submit.rstrip()        
         print 'wfid = ' + wfid
         currentTime = datetime.datetime.now()     
         print currentTime
         while True:
-            guse_info = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=detailsinfo', '-F', 'pass=' + password, '-F', 'ID=' + wfid, url])
+            guse_info = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=detailsinfo', '-F', 'pass=' + RemoteAPIPassword, '-F', 'ID=' + wfid, gUSEurl])
             wfstatus = guse_info.rstrip()            
             wfstate = self.process_detailsinfo(wfstatus, currentTime)
             #break
@@ -469,7 +465,7 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
                 break
             elif wfstate == 1:
                     with open('../gUSE-cloud-vina-results.zip', "w") as redirect_to_file:
-                        subprocess.call(['curl', '-k', '-s', '-S', '-F', 'm=download', '-F', 'pass=' + password, '-F', 'ID=' + wfid, url], stdout=redirect_to_file)
+                        subprocess.call(['curl', '-k', '-s', '-S', '-F', 'm=download', '-F', 'pass=' + RemoteAPIPassword, '-F', 'ID=' + wfid, gUSEurl], stdout=redirect_to_file)
                     
                     timestamp = datetime.datetime.now().strftime("%d-%m-%y--%H-%M-%S-%f")
                     
