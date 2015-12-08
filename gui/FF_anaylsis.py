@@ -489,6 +489,7 @@ class ResultsManager(rb.RaccoonDefaultWidget, DebugTools.DebugObj,  Pmw.Group):
             # use current
             if tmb.askyesno(parent=self.parent, title=t, icon=i, message=m):
                 receptor_ok = True
+                receptor = curr_recname
         # load new receptor
         if not receptor_ok:
             receptor = self.searchReceptor(dirname) 
