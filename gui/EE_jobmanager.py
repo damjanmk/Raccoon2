@@ -167,7 +167,7 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         self.SubmitButton = tk.Button(f, text = 'Submit...', image=self._ICON_submit, 
             font=self.FONT, compound='left',state='disabled', command=self.submit, **self.BORDER)
         self.SubmitButton.grid(row=20, column=1, sticky='we', columnspan=3, padx=4, pady=3)
-
+        
         self.group.pack(fill='none',side='top', anchor='w', ipadx=5, ipady=5)
 
         self.frame.pack(expand=0, fill='x',anchor='n')
@@ -286,6 +286,7 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
             self._updateRequirementsGuse(event)
         #damjan end
     
+        
     def submit(self, event=None, suggest={}):
         """ find out which EVENT should be triggered and how"""
         #damjan begin
@@ -308,7 +309,7 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         self.app.setReady()
     
     def submit_guse(self):
-#         print "\nreceptors: "        
+#         print "\nreceptors: "
         import zipfile
         zreceptors = ZipFile("../receptors.zip", "w")
         # rec
@@ -324,13 +325,13 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
                 temp_lib = a['lib']
                 for b in temp_lib.get_ligands():
                     output_names_content += os.path.splitext(os.path.basename(self.app.engine.RecBook[r]['filename']))[0] + "_" + os.path.splitext(os.path.basename(b))[0] + "_out.pdbqt" + os.linesep
-                    
+
         zreceptors.close()
-        
+
         o = open("../output_names.txt", "w")
         o.write(output_names_content)
         o.close()
-        
+
         # conf
 #         print "\nconf: "
 #         print self.app.engine.vina_settings
@@ -355,8 +356,17 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         zout = ZipFile('../gUSE-cloud-vina-new.zip', 'w')    
         workflow_xml = zin.read('workflow.xml')    
         zin.close()
-          
-        zout.writestr("workflow.xml", workflow_xml)  # , arcname="workflow.xml")#, compress_type=ZipFile.ZIP_DEFLATED)             
+
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(workflow_xml)     
+        workflow_xml_resourcename = root.find(".//execute[@key='resourcename']")
+        workflow_xml_resourcename.set("value", self.app.engine.guseWhichCloudEncoded.get())
+        workflow_xml_regionname = root.find(".//execute[@key='regionname']")
+        workflow_xml_regionname.set("value", self.app.engine.guseWhichCloudRegionEncoded.get())        
+        workflow_xml_instancetypename = root.find(".//execute[@key='instancetypename']")
+        workflow_xml_instancetypename.set("value", self.app.engine.guseWhichCloudInstanceEncoded.get())
+        
+        zout.writestr("workflow.xml", ET.tostring(root, "utf-8"))
         zout.write("../ligands.zip", arcname="vina_output_names/4in1out/inputs/0/0")  
         zout.write("../receptors.zip", arcname="vina_output_names/4in1out/inputs/1/0")
         zout.write("../conf.txt", arcname="vina_output_names/4in1out/inputs/2/0")
@@ -478,16 +488,18 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
                         if name.endswith("output.zip"):
                             output_zip_name_path = name
                     z.close()
+                    if output_zip_name_path == "":
+                        print "Error in downloading results or in the job"
+                    else:
+                        z = ZipFile(temporary_folder + os.sep + output_zip_name_path)
+                        results_folder = "../gUSE-cloud-vina-results-" + timestamp
+                        os.mkdir(results_folder)
+                        z.extractall(results_folder, filter(lambda f: f.endswith(('.pdbqt_log.txt', '.pdbqt')), z.namelist()))
+                        z.close()
                     
-                    z = ZipFile(temporary_folder + os.sep + output_zip_name_path)
-                    results_folder = "../gUSE-cloud-vina-results-" + timestamp
-                    os.mkdir(results_folder)
-                    z.extractall(results_folder, filter(lambda f: f.endswith(('.pdbqt_log.txt', '.pdbqt')), z.namelist()))
-                    z.close()
-                    
-                    os.remove(temporary_folder + os.sep + output_zip_name_path)
-                    last_separator = output_zip_name_path.rfind(os.sep)
-                    os.removedirs(temporary_folder + os.sep + output_zip_name_path[0:last_separator])
+                        os.remove(temporary_folder + os.sep + output_zip_name_path)
+                        last_separator = output_zip_name_path.rfind(os.sep)
+                        os.removedirs(temporary_folder + os.sep + output_zip_name_path[0:last_separator])
 
                     os.remove("../ligands.zip")
                     os.remove("../receptors.zip")
