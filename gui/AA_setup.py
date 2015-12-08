@@ -53,7 +53,8 @@ from mglutil.events import Event, EventHandler
 from mglutil.util.callback import CallbackFunction # as cb
 # XXX provided by Racc default widget
 #from mglutil.util.packageFilePath import getResourceFolderWithVersion
-
+import xml.etree.ElementTree as ET #damjan - xml parser
+from IPython.utils.traitlets import Instance
 
 
 class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
@@ -348,7 +349,7 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
         tk.Label(f3, text="Authentication type ").grid(row=2, column=0, sticky=tk.E, pady=(4, 4))
         guseAuthenticationTypes = ["<choose authentication>", "Basic"]
         self.guseAuthenticationType.set(guseAuthenticationTypes[0]) # default value
-        w = tk.OptionMenu(f3, self.guseAuthenticationType, *guseAuthenticationTypes, command=self.chooseGuseAuthentication)        
+        w = tk.OptionMenu(f3, self.guseAuthenticationType, *guseAuthenticationTypes, command=self.chooseGuseCloud)        
         w.grid(row=2, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
         
         self.lblGuseUsername = tk.Label(f3, text="gUSE username ")
@@ -360,18 +361,98 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
         self.txtGusePassword = tk.Entry(f3, show="*", textvariable=self.app.engine.gusePortalPassword, width=70)
         self.txtGusePassword.grid(row=4, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
                     
-        f3.pack(side='bottom', anchor='n', padx=2,pady=7, expand=0,fill='none')
-    
+        f3.pack(side='top', anchor='n', padx=2,pady=7, expand=0,fill='none')
+        
+        frameForCloudChoice = tk.Frame(self.f1, borderwidth=1, relief=tk.RAISED)
+        
+        self.encodedResourceNames={}
+        self.encodedRegionNames={}
+        self.encodedInstanceTypes={}
+        
+        tree = ET.parse("../guseCloudConfiguration.xml")
+        root = tree.getroot()
+        self.dict_clouds={}
+        for cloud in root.findall('cloud'):
+            resourcename = cloud[0].text
+            self.encodedResourceNames[resourcename] = cloud[2].text            
+            dictRegions = {}
+            for region in cloud.findall('region'):
+                regionname = region[0].text
+                self.encodedRegionNames[resourcename + regionname] = region[2].text
+                arrayInstances = []
+                for instance in region.findall('instance'):
+                    self.encodedInstanceTypes[resourcename + regionname + instance[0].text] = instance[2].text
+                    arrayInstances.append(instance.find('instancetype').text)
+                dictRegions[region.find('regionname').text] = arrayInstances
+            self.dict_clouds[cloud.find('resourcename').text] = dictRegions
+         
+        self.app.engine.guseWhichCloudEncoded = tk.StringVar()
+        self.guseWhichCloud = tk.StringVar()
+        tk.Label(frameForCloudChoice, text="Cloud ").grid(row=0, column=0, sticky=tk.E, pady=(4, 4))
+        self.dropDownCloudChoice = tk.OptionMenu(frameForCloudChoice, self.guseWhichCloud, *self.dict_clouds.keys(), command=self.chooseGuseCloud)
+        self.dropDownCloudChoice.grid(row=0, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
+        
+        self.app.engine.guseWhichCloudRegionEncoded = tk.StringVar()
+        self.guseWhichCloudRegion = tk.StringVar()
+        tk.Label(frameForCloudChoice, text="Region ").grid(row=1, column=0, sticky=tk.E, pady=(4, 4))
+        self.dropDownCloudRegionChoice = tk.OptionMenu(frameForCloudChoice, self.guseWhichCloudRegion, '')
+        self.dropDownCloudRegionChoice.grid(row=1, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
+        
+        self.app.engine.guseWhichCloudInstanceEncoded = tk.StringVar()
+        self.guseWhichCloudInstance = tk.StringVar()
+        tk.Label(frameForCloudChoice, text="Instance ").grid(row=2, column=0, sticky=tk.E, pady=(4, 4))
+        self.dropDownCloudInstanceChoice = tk.OptionMenu(frameForCloudChoice, self.guseWhichCloudInstance, '')
+        self.dropDownCloudInstanceChoice.grid(row=2, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
+
+        self.guseWhichCloud.trace('w', self.updateCloudRegionOptions)
+        self.guseWhichCloudRegion.trace('w', self.updateCloudInstanceOptions)
+
+        self.guseWhichCloud.set(self.dict_clouds.keys()[0])
+        
+        frameForCloudChoice.pack(side='top', anchor='n', padx=2,pady=7, expand=0,fill='none')
+        
+#         frameForMaxInstances = tk.Frame(self.f1, borderwidth=1, relief=tk.RAISED)
+#         frameForMaxInstances.pack(side='top', anchor='n', padx=2,pady=7, expand=0,fill='none')
+        
+        
         # bottom frame
         group.pack(expand=1, fill='both',anchor='center', side='top',padx=5, pady=5)
         self.frame.pack(expand=1, fill='both')
-        #print "Raccoon GUI resource:", self.app.resource
+        #print "Raccoon GUI resource:", self.app.resource              
+
+    def updateCloudRegionOptions(self, *args):
+        clouds_dict = self.dict_clouds[self.guseWhichCloud.get()]
+        regions = clouds_dict.keys()
+        self.guseWhichCloudRegion.set(regions[0])        
+        menu = self.dropDownCloudRegionChoice['menu']
+        menu.delete(0, 'end')
+        for region in regions:
+            menu.add_command(label=region, command=self.chooseGuseCloud)
                 
+    def updateCloudInstanceOptions(self, *args):
+        clouds_dict = self.dict_clouds[self.guseWhichCloud.get()]        
+        instances = clouds_dict[self.guseWhichCloudRegion.get()]
+        self.guseWhichCloudInstance.set(instances[0])
+        menu = self.dropDownCloudInstanceChoice['menu']
+        menu.delete(0, 'end')
+        for instance in instances:
+            menu.add_command(label=instance, command=self.chooseGuseCloud)                
+               
+    def chooseGuseCloud(self, event=None):
+        """manage the guse cloud choice selection from pulldown"""
+        self.app.setBusy()
+        resourcename = self.guseWhichCloud.get()
+        resourcename_regionname = resourcename + self.guseWhichCloudRegion.get()
+        resourcename_regionname_instancename = resourcename_regionname + self.guseWhichCloudInstance.get() 
+        
+        self.app.engine.guseWhichCloudEncoded.set(self.encodedResourceNames[resourcename])
+        self.app.engine.guseWhichCloudRegionEncoded.set(self.encodedRegionNames[resourcename_regionname])
+        self.app.engine.guseWhichCloudInstanceEncoded.set(self.encodedInstanceTypes[resourcename_regionname_instancename])
+        
+     
     def chooseGuseAuthentication(self, guse=None, event=None):
         """manage the guse authentication type selection from pulldown"""
         self.app.setBusy()
-        if guse == None:
-            guse = self.guseAuthentication.getvalue()
         if guse == "<choose authentication>":
             self.lblGuseUsername.grid_remove()
             self.txtGuseUsername.grid_remove()
