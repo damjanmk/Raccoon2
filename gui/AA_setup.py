@@ -371,7 +371,7 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
         
         tree = ET.parse("../guseCloudConfiguration.xml")
         root = tree.getroot()
-        self.dict_clouds={}
+        self.dictClouds={}
         for cloud in root.findall('cloud'):
             resourcename = cloud[0].text
             self.encodedResourceNames[resourcename] = cloud[2].text            
@@ -379,18 +379,18 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
             for region in cloud.findall('region'):
                 regionname = region[0].text
                 self.encodedRegionNames[resourcename + regionname] = region[2].text
-                arrayInstances = []
+                dictInstances = {}
                 for instance in region.findall('instance'):
                     self.encodedInstanceTypes[resourcename + regionname + instance[0].text] = instance[2].text
-                    arrayInstances.append(instance.find('instancetype').text)
-                dictRegions[region.find('regionname').text] = arrayInstances
-            self.dict_clouds[cloud.find('resourcename').text] = dictRegions
+                    dictInstances[instance.find('instancetype').text] = instance.get('maxinstances')
+                dictRegions[region.find('regionname').text] = dictInstances
+            self.dictClouds[cloud.find('resourcename').text] = dictRegions
          
         self.app.engine.guseWhichCloudEncoded = tk.StringVar()
         self.guseWhichCloud = tk.StringVar()
         tk.Label(frameForCloudChoice, text="Cloud ").grid(row=0, column=0, sticky=tk.E, pady=(4, 4))
-        self.dropDownCloudChoice = tk.OptionMenu(frameForCloudChoice, self.guseWhichCloud, *self.dict_clouds.keys(), command=self.chooseGuseCloud)
-        self.dropDownCloudChoice.grid(row=0, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
+        self.dropDownCloudChoice = tk.OptionMenu(frameForCloudChoice, self.guseWhichCloud, *self.dictClouds.keys(), command=self.chooseGuseCloud)
+        self.dropDownCloudChoice.grid(row=0, column=1, padx=(10, 3), sticky=tk.W, ipady=3)        
         
         self.app.engine.guseWhichCloudRegionEncoded = tk.StringVar()
         self.guseWhichCloudRegion = tk.StringVar()
@@ -404,43 +404,66 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
         self.dropDownCloudInstanceChoice = tk.OptionMenu(frameForCloudChoice, self.guseWhichCloudInstance, '')
         self.dropDownCloudInstanceChoice.grid(row=2, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
 
+        frameForCloudChoice.pack(side='top', anchor='n', padx=2,pady=7, expand=0,fill='none')
+                
+        self.app.engine.guseNumberOfInstances = tk.StringVar()
+        self.guseHowManyInstances = tk.StringVar()
+        tk.Label(frameForCloudChoice, text="Number of instances ").grid(row=0, column=2, rowspan=3, sticky=tk.E, pady=(4, 4))
+        scrollbar = tk.Scrollbar(frameForCloudChoice, orient=tk.VERTICAL)
+        self.listBoxNumberOfInstances = tk.Listbox(frameForCloudChoice, yscrollcommand=scrollbar.set, selectmode=tk.SINGLE, width=10, height=8)        
+        self.listBoxNumberOfInstances.bind("<<ListboxSelect>>", self.chooseGuseNumberOfInstances)
+        scrollbar.config(command=self.listBoxNumberOfInstances.yview)
+        scrollbar.grid(column=4, row=0, rowspan=3, sticky=tk.N + tk.S)
+        self.listBoxNumberOfInstances.grid(row=0, column=3, rowspan=3, padx=(10, 3), sticky=tk.W, ipady=3)
+                        
         self.guseWhichCloud.trace('w', self.updateCloudRegionOptions)
         self.guseWhichCloudRegion.trace('w', self.updateCloudInstanceOptions)
 
-        self.guseWhichCloud.set(self.dict_clouds.keys()[0])
+        self.guseWhichCloud.set(self.dictClouds.keys()[0])
         
-        frameForCloudChoice.pack(side='top', anchor='n', padx=2,pady=7, expand=0,fill='none')
+        self.chooseGuseCloud()
         
-#         frameForMaxInstances = tk.Frame(self.f1, borderwidth=1, relief=tk.RAISED)
-#         frameForMaxInstances.pack(side='top', anchor='n', padx=2,pady=7, expand=0,fill='none')
-        
-        
+                
         # bottom frame
         group.pack(expand=1, fill='both',anchor='center', side='top',padx=5, pady=5)
         self.frame.pack(expand=1, fill='both')
         #print "Raccoon GUI resource:", self.app.resource              
 
     def updateCloudRegionOptions(self, *args):
-        clouds_dict = self.dict_clouds[self.guseWhichCloud.get()]
-        regions = clouds_dict.keys()
+        cloudsDict = self.dictClouds[self.guseWhichCloud.get()]
+        regions = cloudsDict.keys()
         self.guseWhichCloudRegion.set(regions[0])        
         menu = self.dropDownCloudRegionChoice['menu']
         menu.delete(0, 'end')
         for region in regions:
-            menu.add_command(label=region, command=self.chooseGuseCloud)
+            menu.add_command(label=region, command=lambda value=region: self.chooseGuseRegion(value))
                 
     def updateCloudInstanceOptions(self, *args):
-        clouds_dict = self.dict_clouds[self.guseWhichCloud.get()]        
-        instances = clouds_dict[self.guseWhichCloudRegion.get()]
-        self.guseWhichCloudInstance.set(instances[0])
+        cloudsDict = self.dictClouds[self.guseWhichCloud.get()]        
+        instances = cloudsDict[self.guseWhichCloudRegion.get()]
+        self.guseWhichCloudInstance.set(instances.keys()[0])
         menu = self.dropDownCloudInstanceChoice['menu']
         menu.delete(0, 'end')
-        for instance in instances:
-            menu.add_command(label=instance, command=self.chooseGuseCloud)                
-               
+        for instance in instances.keys():
+            menu.add_command(label=instance, command=lambda value=instance: self.chooseGuseInstance(value))
+    
+    def chooseGuseRegion(self, region):
+        self.guseWhichCloudRegion.set(region)
+        self.chooseGuseCloud()
+    
+    def chooseGuseInstance(self, instance):
+        self.guseWhichCloudInstance.set(instance)
+        self.chooseGuseCloud()
+    
+    def chooseGuseNumberOfInstances(self, evt):
+        w = evt.widget
+        value = w.get(int(w.curselection()[0]))        
+        self.guseHowManyInstances.set(value)
+        self.app.engine.guseNumberOfInstances.set(value)
+                  
     def chooseGuseCloud(self, event=None):
         """manage the guse cloud choice selection from pulldown"""
-        self.app.setBusy()
+        
         resourcename = self.guseWhichCloud.get()
         resourcename_regionname = resourcename + self.guseWhichCloudRegion.get()
         resourcename_regionname_instancename = resourcename_regionname + self.guseWhichCloudInstance.get() 
@@ -449,6 +472,12 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
         self.app.engine.guseWhichCloudRegionEncoded.set(self.encodedRegionNames[resourcename_regionname])
         self.app.engine.guseWhichCloudInstanceEncoded.set(self.encodedInstanceTypes[resourcename_regionname_instancename])
         
+        self.listBoxNumberOfInstances.delete(0, tk.END)
+        maxInstances = self.dictClouds[self.guseWhichCloud.get()][self.guseWhichCloudRegion.get()][self.guseWhichCloudInstance.get()]
+        options = range(1, int(maxInstances) + 1)
+        for mi in options:
+            self.listBoxNumberOfInstances.insert(tk.END, mi)
+        self.guseHowManyInstances.set(str(options[0]))    
      
     def chooseGuseAuthentication(self, guse=None, event=None):
         """manage the guse authentication type selection from pulldown"""
