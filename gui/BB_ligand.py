@@ -707,12 +707,35 @@ class LibraryManagerWin(rb.RaccoonDefaultWidget):
         
         lll = Library(list(self._ligand_list))
         self.app.ligand_source = [ {'lib': lll, 'filters' : None } ]
+        import shutil
+        dirs = os.listdir( "../" )
+        for f in dirs:
+            if f.startswith("files"):
+                shutil.rmtree("../" + str(f))    
         
-        zligands = zipfile.ZipFile('../ligands.zip', 'w')
-        try:
-            for ligand in self._ligand_list:
-                zligands.write(ligand, arcname=self.path_leaf(ligand))            
-            zligands.close()
+        instances = int( self.app.engine.guseNumberOfInstances.get() )
+        numberOfLigandsPerFolder = len(self._ligand_list) / instances
+        modLigandsPerFolder = len(self._ligand_list) % instances 
+        i = 0;        
+        for numberOfInstance in range(0, instances):
+            newFolderName = "../files" + str(numberOfInstance) 
+            os.mkdir(newFolderName)
+            currentLigand = 0
+            addToLimit = 0
+            if modLigandsPerFolder > 0:
+                addToLimit = 1
+                modLigandsPerFolder = modLigandsPerFolder - 1
+            zligands = zipfile.ZipFile(newFolderName + '/ligands.zip', 'w')
+            for ligand in lll.get_ligands():
+                if currentLigand >= i:
+                    if currentLigand - i < numberOfLigandsPerFolder + addToLimit:
+                        zligands.write(ligand, arcname=self.path_leaf(ligand))
+                currentLigand = currentLigand + 1            
+            zligands.close()            
+            
+            i = i + numberOfLigandsPerFolder + addToLimit
+            
+        try:                
             title ='Ligands prepared successfully'
             msg = ('The ligands have been prepared succesfully.')
             tmb.showinfo(parent = self.win.interior(), title = title, message = msg)           
