@@ -52,6 +52,7 @@ from PIL import Image, ImageTk
 from mglutil.events import Event, EventHandler
 from mglutil.util.callback import CallbackFunction # as cb
 from compiler.pycodegen import TRY_FINALLY
+import shutil
 #import EF_resultprocessor 
 class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
     """ populate and manage the job manager tab """
@@ -308,24 +309,24 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
             self.submit_opal(job_info)        
         self.app.setReady()
     
-    def submit_guse(self):
-#         print "\nreceptors: "
-        import zipfile
+    def submit_guse(self): 
+        self.createCertsZip(self.app.engine.guseCredentialsId.get(), self.app.engine.gusePortalUsername.get(), self.app.engine.gusePortalPassword.get())
+        
+               
+        import zipfile    
         zreceptors = ZipFile("../receptors.zip", "w")
         # rec
         output_names_content = ""
-        i = 1
+        numberOfLigands = 0
         for r in self.app.engine.RecBook.keys():
-            #receptor_name = "receptor" + str(i)
             zreceptors.write(self.app.engine.RecBook[r]['filename'], arcname=os.path.splitext(os.path.basename(self.app.engine.RecBook[r]['filename']))[0] + ".pdbqt")
-            i = i + 1
             # ligand 
             llib = self.app.ligand_source
             for a in llib:
                 temp_lib = a['lib']
                 for b in temp_lib.get_ligands():
                     output_names_content += os.path.splitext(os.path.basename(self.app.engine.RecBook[r]['filename']))[0] + "_" + os.path.splitext(os.path.basename(b))[0] + "_out.pdbqt" + os.linesep
-
+                    numberOfLigands = numberOfLigands + 1    
         zreceptors.close()
 
         o = open("../output_names.txt", "w")
@@ -344,40 +345,69 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
                     continue                    
             else:
                 config_content += keyword + " = " + str(self.app.engine.vina_settings[keyword]) + os.linesep
+        
         f = open("../conf.txt", "w")
         f.write(config_content)
         f.close()
-        self.RunGuse(self.app.engine.guseRemoteAPIURL.get(), self.app.engine.guseCredentialsId.get(), self.app.engine.guseRemoteAPIPassword.get(), 
-                     self.app.engine.gusePortalUsername.get(), self.app.engine.gusePortalPassword.get())
+        
+        instances = int( self.app.engine.guseNumberOfInstances.get() )
+        print instances
+        numberOfLigandsPerFolder = numberOfLigands / instances
+        modLigandsPerFolder = numberOfLigands % instances 
+        i = 0;
+        
+        for numberOfInstance in range(0, instances):
+            newFolderName = "../files" + str(numberOfInstance)
+            shutil.copy("../receptors.zip", newFolderName + "/")
+            shutil.copy("../conf.txt", newFolderName + "/")
+            addToLimit = 0
+            if modLigandsPerFolder > 0:
+                addToLimit = 1
+                modLigandsPerFolder = modLigandsPerFolder - 1
+            o = open(newFolderName + "/output_names.txt", "w")
+            currentLine = 0
+            for line in output_names_content.split(os.linesep):
+                if currentLine >= i:
+                    if currentLine - i < numberOfLigandsPerFolder + addToLimit:
+                        o.write(line + os.linesep)
+                    else:
+                        break
+                currentLine = currentLine + 1
+            o.close()            
+            i = i + numberOfLigandsPerFolder + addToLimit
 
+        self.prepareVinaOutputNamesZip(instances)
+        self.RunGuse(self.app.engine.guseRemoteAPIURL.get(), self.app.engine.guseRemoteAPIPassword.get(), instances)
 
-    def prepareVinaOutputNamesZip(self):
-        zin = ZipFile('../gUSE-cloud-vina.zip', 'r')
-        zout = ZipFile('../gUSE-cloud-vina-new.zip', 'w')    
+    def prepareVinaOutputNamesZip(self, numberOfFolders):
+        zin = ZipFile('../gUSE-cloud-vina.zip', 'r')            
         workflow_xml = zin.read('workflow.xml')    
         zin.close()
-
-        import xml.etree.ElementTree as ET
-        root = ET.fromstring(workflow_xml)     
-        workflow_xml_resourcename = root.find(".//execute[@key='resourcename']")
-        workflow_xml_resourcename.set("value", self.app.engine.guseWhichCloudEncoded.get())
-        workflow_xml_regionname = root.find(".//execute[@key='regionname']")
-        workflow_xml_regionname.set("value", self.app.engine.guseWhichCloudRegionEncoded.get())        
-        workflow_xml_instancetypename = root.find(".//execute[@key='instancetypename']")
-        workflow_xml_instancetypename.set("value", self.app.engine.guseWhichCloudInstanceEncoded.get())
-        
-        zout.writestr("workflow.xml", ET.tostring(root, "utf-8"))
-        zout.write("../ligands.zip", arcname="vina_output_names/4in1out/inputs/0/0")  
-        zout.write("../receptors.zip", arcname="vina_output_names/4in1out/inputs/1/0")
-        zout.write("../conf.txt", arcname="vina_output_names/4in1out/inputs/2/0")
-        zout.write("../output_names.txt", arcname="vina_output_names/4in1out/inputs/3/0")
-        
-        zout.close()
-        
-        os.remove("../gUSE-cloud-vina.zip")
-        os.rename("../gUSE-cloud-vina-new.zip", "../gUSE-cloud-vina.zip")    
+        for folderNumber in range(0, numberOfFolders):
+            folderNumber = str(folderNumber)
+            zout = ZipFile('../files' + folderNumber + '/gUSE-cloud-vina.zip', 'w')
     
-    def process_detailsinfo(self, wfstatus, startTime):    
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(workflow_xml)     
+            workflow_xml_resourcename = root.find(".//execute[@key='resourcename']")
+            workflow_xml_resourcename.set("value", self.app.engine.guseWhichCloudEncoded.get())
+            workflow_xml_regionname = root.find(".//execute[@key='regionname']")
+            workflow_xml_regionname.set("value", self.app.engine.guseWhichCloudRegionEncoded.get())        
+            workflow_xml_instancetypename = root.find(".//execute[@key='instancetypename']")
+            workflow_xml_instancetypename.set("value", self.app.engine.guseWhichCloudInstanceEncoded.get())
+            
+            zout.writestr("workflow.xml", ET.tostring(root, "utf-8"))
+            zout.write("../files" + folderNumber + "/ligands.zip", arcname="vina_output_names/4in1out/inputs/0/0")  
+            zout.write("../files" + folderNumber + "/receptors.zip", arcname="vina_output_names/4in1out/inputs/1/0")
+            zout.write("../files" + folderNumber + "/conf.txt", arcname="vina_output_names/4in1out/inputs/2/0")
+            zout.write("../files" + folderNumber + "/output_names.txt", arcname="vina_output_names/4in1out/inputs/3/0")
+            
+            zout.close()
+        
+#        os.remove("../gUSE-cloud-vina.zip")
+#        os.rename("../gUSE-cloud-vina-new.zip", "../gUSE-cloud-vina.zip")    
+    
+    def process_detailsinfo(self, wfstatus):#, startTime):    
         i = 0
         init = 0
         running = 0
@@ -403,9 +433,9 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
                     self.jobResultListbox.insert(tk.END, "Raccoon execution via gUSE stopped by administrator")
                 elif wfstatusSegment == "not valid data":
                     self.jobResultListbox.insert(tk.END, "Data for Raccoon execution via gUSE not valid")
-                currentTime = datetime.datetime.now()                
-                timeDifference = currentTime - startTime
-                self.jobResultListbox.insert(tk.END, "Execution time: " + str(timeDifference))
+#                 currentTime = datetime.datetime.now()                
+#                 timeDifference = currentTime - startTime
+#                 self.jobResultListbox.insert(tk.END, "Execution time: " + str(timeDifference))
             else:
                 for jobstatus in wfstatusSegment.split(":"):
                     jobstatusList = jobstatus.split("=")            
@@ -444,8 +474,7 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         self.frame.update()
         return returnVal
     
-    
-    def RunGuse(self, gUSEurl, CredentialsId, RemoteAPIPassword, PortalUsername, PortalPassword):        
+    def createCertsZip(self, CredentialsId, PortalUsername, PortalPassword):
         # make certs.zip
         GuseAuthenticationFileName = 'x509up.' + CredentialsId
         authenticationFile = open(GuseAuthenticationFileName, 'w')
@@ -455,31 +484,54 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         GuseCertsZip.write(GuseAuthenticationFileName)
         GuseCertsZip.close()
         os.remove(GuseAuthenticationFileName)
-         
-        self.prepareVinaOutputNamesZip()    
-        workflowZip = "gUSE-cloud-vina.zip"
-            
-        self.jobResultListbox.insert(tk.END, "Submitting " + workflowZip + " via gUSE")
-        self.frame.update()                
-        guse_submit = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=submit', '-F', 'pass=' + RemoteAPIPassword, '-F', 'gusewf=@../' + workflowZip, '-F', 'certs=@../certs.zip', gUSEurl])
-        wfid = guse_submit.rstrip()        
-        print 'wfid = ' + wfid
-        currentTime = datetime.datetime.now()     
-        print currentTime
+        
+    def RunGuse(self, gUSEurl, RemoteAPIPassword, numberOfFolders):
+        
+        wfidsList = list()
+        for folderName in range(0, numberOfFolders):
+            folderName = str(folderName)
+            workflowZip = "../files" + folderName + "/gUSE-cloud-vina.zip"            
+            self.jobResultListbox.insert(tk.END, "Submitting " + workflowZip + " via gUSE")
+            self.frame.update()
+                            
+            guse_submit = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=submit', '-F', 'pass=' + RemoteAPIPassword, '-F', 'gusewf=@' + workflowZip, '-F', 'certs=@../certs.zip', gUSEurl])
+            wfid = guse_submit.rstrip()
+            wfidsList.append(str(wfid))
+            print 'wfid = ' + wfid
+            sleep(10)
+        
+        self.checkGuseStatus(wfidsList, RemoteAPIPassword, gUSEurl)
+        #currentTime = datetime.datetime.now()     
+        #print currentTime
+        
+    def checkGuseStatus(self, wfidsList, RemoteAPIPassword, gUSEurl):        
+        folderNumbers = range(0, len(wfidsList))
         while True:
-            guse_info = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=detailsinfo', '-F', 'pass=' + RemoteAPIPassword, '-F', 'ID=' + wfid, gUSEurl])
-            wfstatus = guse_info.rstrip()            
-            wfstate = self.process_detailsinfo(wfstatus, currentTime)
-            #break
-            if wfstate == 0:
-                break
-            elif wfstate == 1:
-                    with open('../gUSE-cloud-vina-results.zip', "w") as redirect_to_file:
+            i = 0                        
+            for wfid in wfidsList:                
+                folderNumber = folderNumbers[i]
+                try:
+                    guse_info = subprocess.check_output(['curl', '-k', '-s', '-S', '-F', 'm=detailsinfo', '-F', 'pass=' + RemoteAPIPassword, '-F', 'ID=' + wfid, gUSEurl])
+                    wfstatus = guse_info.rstrip()
+                except Exception:
+                    wfstatus = -1
+                                
+                if wfstatus == -1:
+                    sleep(10)
+                    continue;
+                self.jobResultListbox.insert(tk.END, "Analysing " + wfid + ", folder number " + str(folderNumber))
+                wfstate = self.process_detailsinfo(wfstatus)#, currentTime)                
+                if wfstate == 0:
+                    wfidsList.remove(wfid)
+                    folderNumbers.remove(folderNumber)
+                    break
+                elif wfstate == 1:
+                    with open('../files' + str(folderNumber) + '/gUSE-cloud-vina-results.zip', "w") as redirect_to_file:
                         subprocess.call(['curl', '-k', '-s', '-S', '-F', 'm=download', '-F', 'pass=' + RemoteAPIPassword, '-F', 'ID=' + wfid, gUSEurl], stdout=redirect_to_file)
                     
                     timestamp = datetime.datetime.now().strftime("%d-%m-%y--%H-%M-%S-%f")
                     
-                    z = ZipFile('../gUSE-cloud-vina-results.zip', 'r')
+                    z = ZipFile('../files' + str(folderNumber) + '/gUSE-cloud-vina-results.zip', 'r')
                     temporary_folder = "res" + timestamp
                     os.mkdir(temporary_folder)
                     z.extractall(temporary_folder, filter(lambda f: f.endswith('output.zip'), z.namelist()))
@@ -492,7 +544,7 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
                         print "Error in downloading results or in the job"
                     else:
                         z = ZipFile(temporary_folder + os.sep + output_zip_name_path)
-                        results_folder = "../gUSE-cloud-vina-results-" + timestamp
+                        results_folder = "../files" + str(folderNumber) + "/gUSE-cloud-vina-results-" + timestamp
                         os.mkdir(results_folder)
                         z.extractall(results_folder, filter(lambda f: f.endswith(('.pdbqt_log.txt', '.pdbqt')), z.namelist()))
                         z.close()
@@ -501,14 +553,21 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
                         last_separator = output_zip_name_path.rfind(os.sep)
                         os.removedirs(temporary_folder + os.sep + output_zip_name_path[0:last_separator])
 
-                    os.remove("../ligands.zip")
-                    os.remove("../receptors.zip")
-                    os.remove("../conf.txt")
-                    os.remove("../output_names.txt")
-                    os.remove("../certs.zip")    
-                    break                        
-            else:            
-                sleep(20)
+                    #os.remove("../ligands.zip")
+                    #os.remove("../receptors.zip")
+                    #os.remove("../conf.txt")
+                    #os.remove("../output_names.txt")
+                    #os.remove("../certs.zip")    
+                    wfidsList.remove(wfid)
+                    folderNumbers.remove(folderNumber)  
+                    break 
+                i = i + 1 
+                sleep(5)                          
+            if not wfidsList:
+                break
+            else:        
+                sleep(10)
+    
     
     def submit_local(self, job_info):
         """ manage submission and feedback from local resource"""
