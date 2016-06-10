@@ -347,7 +347,7 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
         
         self.guseAuthenticationType = tk.StringVar()
         tk.Label(f3, text="Authentication type ").grid(row=2, column=0, sticky=tk.E, pady=(4, 4))
-        guseAuthenticationTypes = ["<choose authentication>", "Basic"]
+        guseAuthenticationTypes = ["Basic", "<choose authentication>"]
         self.guseAuthenticationType.set(guseAuthenticationTypes[0]) # default value
         w = tk.OptionMenu(f3, self.guseAuthenticationType, *guseAuthenticationTypes, command=self.chooseGuseCloud)        
         w.grid(row=2, column=1, padx=(10, 3), sticky=tk.W, ipady=3)
@@ -545,9 +545,10 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
             self.f1.pack_forget()
             self.app.setReady()
         elif guse == "Cloud":
-            self.f1.pack(side='top', anchor='center', expand=0, fill='x')
+            self.f1.pack(side='left', anchor='n', expand=0, fill='none')
             self.guseAuthenticationType.set("Basic")
             self.app.guse = self.guseChooser.getvalue()
+
         self.app.setReady()
     
 #damjan end
