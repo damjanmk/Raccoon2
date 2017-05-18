@@ -369,7 +369,7 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
         self.encodedRegionNames={}
         self.encodedInstanceTypes={}
         
-        tree = ET.parse("../guseCloudConfiguration.xml")
+        tree = ET.parse(".." + os.sep + "guseCloudConfiguration.xml")
         root = tree.getroot()
         self.dictClouds={}
         for cloud in root.findall('cloud'):
