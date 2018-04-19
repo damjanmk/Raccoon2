@@ -53,10 +53,7 @@ import sys, time
 from mglutil.events import Event, EventHandler
 from mglutil.util.callback import CallbackFunction #as cb
 import zipfile #from zipfile import ZipFile
-#damjan imports
-import datetime
-import ntpath
-import shutil
+
 
 class LigandTab(rb.TabBase, rb.RaccoonDefaultWidget):
     
@@ -680,14 +677,7 @@ class LibraryManagerWin(rb.RaccoonDefaultWidget):
         
     #damjan begin (could all this be moved to DamjanGuseThread.py)
     
-    def path_leaf(self, path):
-        """ Return the name of the file from the path (everything after the last slash '/')
-         
-        Arguments:        
-        path -- the entire path
-        """
-        head, tail = ntpath.split(path)
-        return tail or ntpath.basename(head)
+    
     
     def prepare_ligands_for_guse(self):        
         """ Prepare ligands for gUSE. This includes looping through all ligands and compressing them in a zip file (ligands.zip)
@@ -719,51 +709,6 @@ class LibraryManagerWin(rb.RaccoonDefaultWidget):
         
         libraryOfLigands = Library(list(self._ligand_list))
         self.app.ligand_source = [ {'lib': libraryOfLigands, 'filters' : None } ]
-        
-        dirs = os.listdir( ".." + os.sep )
-        for f in dirs:
-            if f.startswith("files"):
-                shutil.rmtree(".." + os.sep + str(f))    
-        
-        timestamp = datetime.datetime.now().strftime("%d-%m-%y--%H-%M-%S-%f")
-        #keep all filesX folders inside this folder
-        resultFolderName = ".." + os.sep + "results" + timestamp                
-        os.mkdir(resultFolderName)
-        # make it available for other classes
-        self.app.engine.guseResultFolderName = resultFolderName
-        # get number of instances selected in AA_setup
-        instances = int( self.app.engine.guseNumberOfInstances.get() )
-        # calculate how many ligands are needed in each folder
-        numberOfLigandsPerFolder = len(self._ligand_list) / instances
-        # this is the modulo, needed if the number of ligands is not divisible by the number of isntances
-        modLigandsPerFolder = len(self._ligand_list) % instances
-        totalNumberOfLigands = 0;
-        # loop through, for each instance which will be used
-        for numberOfInstance in range(0, instances):
-            # create a folder called e.g. files0
-            newFolderName = resultFolderName + os.sep + "files" + str(numberOfInstance) 
-            os.mkdir(newFolderName)
-            
-            currentLigand = 0
-            addToLimit = 0
-            # depends if the number of ligands is divisible by the number of instances or not
-            if modLigandsPerFolder > 0:
-                addToLimit = 1
-                modLigandsPerFolder = modLigandsPerFolder - 1
-            # make one ligands.zip for each instance (within the filesX folder)
-            zligands = zipfile.ZipFile(newFolderName + os.sep + 'ligands.zip', 'w')
-            # loop through all ligands and find the correct ones which should be included in the zip file
-            for ligand in libraryOfLigands.get_ligands():
-                # if the index number of the current ligand is >= than totalNumberOfLigands then add that ligand to the zip file
-                if currentLigand >= totalNumberOfLigands:
-                    if currentLigand - totalNumberOfLigands < numberOfLigandsPerFolder + addToLimit:
-                        zligands.write(ligand, arcname=self.path_leaf(ligand))
-                # in any case, increment currentLigand
-                currentLigand = currentLigand + 1            
-            zligands.close()            
-            
-            # increment totalNumberOfLigands
-            totalNumberOfLigands = totalNumberOfLigands + numberOfLigandsPerFolder + addToLimit
         
         # show the appropriate message in line with the way it was written in the original Raccoon2    
         try:                
