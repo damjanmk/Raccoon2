@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<clouds>	
+	<cloud>
+		<resourcename>University of Westminster</resourcename>
+		<fullresourcename>OpenStack Nova University of Westminster UoW</fullresourcename>
+		<encodedresourcename>5d9a4557-4cb4-48b9-bdc9-25c0fe8bb59d</encodedresourcename>
+		<region>
+			<regionname>Westminster</regionname>
+			<fullregionname>Westminster</fullregionname>
+			<encodedregionname>94245f0d-fd8b-4034-bbd8-f662cfd006aa</encodedregionname>
+			<instance maxinstances="1">
+				<instancetype>small</instancetype>
+				<fullinstancetype>OpenStack Nova University of Westminster UoW Westminster small</fullinstancetype>
+				<encodedinstancetype>a38839e9-8b14-45b2-8485-4cdaec584f63</encodedinstancetype>
+			</instance>			
+		</region>
+	</cloud>	
+</clouds>	
+
