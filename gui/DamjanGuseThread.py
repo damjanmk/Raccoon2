@@ -20,7 +20,6 @@ class gUseThread(threading.Thread):
         self.app = app
         threading.Thread.__init__(self)
         self.queue = queue
-#         self.resultFolderName = self.app.engine.guseResultFolderName
         
     def path_leaf(self, path):
         """ Return the name of the file from the path (everything after the last slash '/')
@@ -36,29 +35,6 @@ class gUseThread(threading.Thread):
         """
         # create the certs authentication file
         self.createCertsZip(self.app.engine.guseCredentialsId.get(), self.app.engine.gusePortalUsername.get(), self.app.engine.gusePortalPassword.get())
-         
-#         # and create output_names.txt as a string
-#         output_names_content = ""
-#         # needed for properly splitting the workflows later
-#         numberOfLigands = 0
-#         # attached receptors stored in RecBook as attributes to the keys
-#         for r in self.app.engine.RecBook.keys():
-#             # write each receptor to the receptors.zip
-#             zreceptors.write(self.app.engine.RecBook[r]['filename'], arcname=os.path.splitext(os.path.basename(self.app.engine.RecBook[r]['filename']))[0] + ".pdbqt")
-#             # loop through all ligands and create the output_names.txt file
-#             # data structure is a little comples - *could be done more efficiently
-#             llib = self.app.ligand_source
-#             for a in llib:
-#                 temp_lib = a['lib']
-#                 for ligandPath in temp_lib.get_ligands():
-#                     # fill in the string for output_names.txt
-#                     output_names_content += os.path.splitext(os.path.basename(self.app.engine.RecBook[r]['filename']))[0] + "_" + os.path.splitext(os.path.basename(ligandPath))[0] + "_out.pdbqt" + os.linesep
-#                     numberOfLigands = numberOfLigands + 1    
-#         zreceptors.close()
-#         #store the string into a txt file
-#         output_names_file = open(".." + os.sep + "output_names.txt", "w")
-#         output_names_file.write(output_names_content)
-#         output_names_file.close()
  
         # process the selected configuration (conf)
         config_content = ""
@@ -152,65 +128,10 @@ class gUseThread(threading.Thread):
                     for this_ligand in ligands_for_this_instance:
                         output_names_file.write(this_receptor + "_" + this_ligand + "_out.pdbqt" + os.linesep)
                 
-#             currentLine = 0
-#             for line in output_names_content.split(os.linesep):
-#                 if currentLine >= i:
-#                     if currentLine - i < numberOfLigandsPerFolder + addToLimit:
-#                         output_names_file.write(line + os.linesep)
-#                     else:
-#                         break
-#                 currentLine = currentLine + 1
-#             output_names_file.close()            
-#             i = i + numberOfLigandsPerFolder + addToLimit
             
             shutil.copy(".." + os.sep + "conf.txt", newFolderName + os.sep)
             
         
-#         for r in self.app.engine.RecBook.keys():
-#             # write each receptor to the receptors.zip
-#             zreceptors.write(self.app.engine.RecBook[r]['filename'], arcname=os.path.splitext(os.path.basename(self.app.engine.RecBook[r]['filename']))[0] + ".pdbqt")
-#             # loop through all ligands and create the output_names.txt file
-#             # data structure is a little comples - *could be done more efficiently
-#             llib = self.app.ligand_source
-#             for a in llib:
-#                 temp_lib = a['lib']
-#                 for ligandPath in temp_lib.get_ligands():
-#                     # fill in the string for output_names.txt
-#                     output_names_content += os.path.splitext(os.path.basename(self.app.engine.RecBook[r]['filename']))[0] + "_" + os.path.splitext(os.path.basename(ligandPath))[0] + "_out.pdbqt" + os.linesep
-#                     numberOfLigands = numberOfLigands + 1    
-#         zreceptors.close()
-#         #store the string into a txt file
-#         output_names_file = open(".." + os.sep + "output_names.txt", "w")
-#         output_names_file.write(output_names_content)
-#         output_names_file.close()        
-
-
-#         numberOfLigandsPerFolder = numberOfLigands / instances
-#         modLigandsPerFolder = numberOfLigands % instances 
-#         i = 0;
-#         # create a new folder for each instance and fill it with the (copied) input files 
-#         for numberOfInstance in range(0, instances):
-#             newFolderName = self.resultFolderName + os.sep + "files" + str(numberOfInstance)
-#             shutil.copy(".." + os.sep + "receptors.zip", newFolderName + os.sep)
-#             shutil.copy(".." + os.sep + "conf.txt", newFolderName + os.sep)
-#             addToLimit = 0
-#             if modLigandsPerFolder > 0:
-#                 addToLimit = 1
-#                 modLigandsPerFolder = modLigandsPerFolder - 1
-#             
-#             # make a new smaller output_names.txt for each folder only
-#             output_names_file = open(newFolderName + os.sep + "output_names.txt", "w")
-#             currentLine = 0
-#             for line in output_names_content.split(os.linesep):
-#                 if currentLine >= i:
-#                     if currentLine - i < numberOfLigandsPerFolder + addToLimit:
-#                         output_names_file.write(line + os.linesep)
-#                     else:
-#                         break
-#                 currentLine = currentLine + 1
-#             output_names_file.close()            
-#             i = i + numberOfLigandsPerFolder + addToLimit
-#             
         self.prepareWorkflows(instances)
         self.runGuse(self.app.engine.guseRemoteAPIURL.get(), self.app.engine.guseRemoteAPIPassword.get(), instances)
                 
@@ -281,9 +202,6 @@ class gUseThread(threading.Thread):
             zout.write(self.resultFolderName + os.sep + "instance_" + folderNumber + os.sep + "receptors.zip", arcname="vina_output_names/4in1out/inputs/1/0")
             zout.write(self.resultFolderName + os.sep + "instance_" + folderNumber + os.sep + "conf.txt", arcname="vina_output_names/4in1out/inputs/2/0")
             zout.write(self.resultFolderName + os.sep + "instance_" + folderNumber + os.sep + "output_names.txt", arcname="vina_output_names/4in1out/inputs/3/0")
-#             zout.write(self.resultFolderName + os.sep + "instance_" + folderNumber + os.sep + "ligands.zip", arcname="vina/prepare-dpf/inputs/0/0")  
-#             zout.write(self.resultFolderName + os.sep + "instance_" + folderNumber + os.sep + "receptors.zip", arcname="vina/prepare-dpf/inputs/1/0")
-#             zout.write(self.resultFolderName + os.sep + "instance_" + folderNumber + os.sep + "conf.txt", arcname="vina/prepare-dpf/inputs/2/0")
             
             zout.close()
     
@@ -308,7 +226,6 @@ class gUseThread(threading.Thread):
             self.queue.put("Submitted " + workflowZip + " via gUSE")
             # wfid must be trimmed (stripped); it is the worfklowID of the newly submitted workflow which is added to the wfidsList
             wfidsDict[folderNumber] = wfid.strip()
-#             print 'workflowID = ' + wfid
             # to prevent DDOS timeouts of the server, wait for 10 seconds
             sleep(10)
         # once done with submitting all the workflows, call processGuseStatus for all of them (using the wfidsDict)
@@ -520,16 +437,11 @@ class gUseThread(threading.Thread):
 
         # create group_id so all insersions and analysis can be tracked
         group_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S%Z-") + str(random.random())
-        # folders to write the result file to (in the beginning the same as number of worlfows)
-        #folderNumbers = range(1, len(wfidsList) + 1)
+        # folders to write the result file to (in the beginning the same as number of workflows)
         while True:
-            # index of the folderNumbers list - *could be done more efficiently
-#             i = 0
-            # loop through all IDs of active workflows
-            #for wfid in wfidsList:
+            # loop through all folder numbers of active workflows
             for folderNumber in wfidsDict.keys():
-                # get the folderNumber to write the results into e.g. files0
-#                 folderNumber = folderNumbers[i]
+                # get the workflow ID for that folder number (folder number will be seen in 'instance_X')
                 wfid = wfidsDict[folderNumber]
                 # call RemoteAPI m='detailsinfo' for the workflow with wfid
                 try:
@@ -546,15 +458,15 @@ class gUseThread(threading.Thread):
                 
                 # get a new timestamp of when the workflow finished according to the Raccoon2 UI (small delay)
                 self.timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
-                # if there was no errors with RemoteAPI m='detailsinfo', process the result it returned
+                # if there were no errors with RemoteAPI m='detailsinfo', process the result it returned
                 wfstate = self.processDetailsinfo(wfstatus, str(folderNumber), self.app.engine.guseNumberOfInstances.get())
+                
                 # value returned: 0 - suspended, or not valid data.
                 if wfstate == 0:
-                    # just remove the wfid from the list and start over looping through the new list of workflow IDs
-#                     wfidsList.remove(wfid)
-#                     folderNumbers.remove(folderNumber)
+                    # remove the key-value (folderNumber-wfid) pair for that folder number from the dict and start over looping through the rest
                     del wfidsDict[folderNumber]
                     continue
+                
                 # value returned: 1 - finished, or error.
                 elif wfstate == 1:
                     # download the results into this file
@@ -598,13 +510,10 @@ class gUseThread(threading.Thread):
                     #os.remove("../output_names.txt")
                     #os.remove("../certs.zip")
                     
-                    # once downloaded, remove the workflow id from the list and start over looping through the new list of workflow IDs    
-#                     wfidsList.remove(wfid)
-#                     folderNumbers.remove(folderNumber)
+                    # once downloaded, remove the element from the dict and continue the loop    
                     del wfidsDict[folderNumber]
                     continue
-                # increment the folder number and start processing the next workflow in 5 seconds
-#                 i = i + 1 
+                # start processing the next workflow in 5 seconds
                 sleep(5)                          
             if not wfidsDict:
                 # print when all workflows have been processed
