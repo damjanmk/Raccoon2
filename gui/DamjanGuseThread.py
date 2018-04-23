@@ -20,6 +20,7 @@ class gUseThread(threading.Thread):
         self.app = app
         threading.Thread.__init__(self)
         self.queue = queue
+        self.app.engine.guseMdrrServerUrl.set("http://localhost:8090")
         
     def path_leaf(self, path):
         """ Return the name of the file from the path (everything after the last slash '/')
@@ -335,6 +336,172 @@ class gUseThread(threading.Thread):
             # print the error code and message and raise the error again
             print e 
             raise e     
+    
+    def MDRRinsertMany(self, ligands, receptors, configs, results, group_id, url):
+        """ Call MDRR-RestApi insertMany
+        
+        Arguments:
+        ligands -- the zip file of ligands
+        receptors -- zip file of receptors
+        configs -- zip file of conf.txt file (1-to-1 mapping with receptors, one conf for each receptor)  
+        results -- zip file with results (recName_ligName_out.pdbqt and recName_ligName_out.pdbqt_log.txt)
+        url -- the url of the MDRR server (or the full url to the RESTful API method e.g. http://localhost:8090 or http://localhost:8090/insertMany - both will work) 
+        
+        Returns:
+        The response of the server after adding the resutls to the MongoDB
+        
+        This method uses Requests to send a HTTP request to the MDRR at url
+            
+        Raises requests.exceptions.RequestException (prints the error code and error message on terminal beforehand)     
+        """
+        if not url.endswith("/insertMany"):
+            url = url + "/insertMany"
+        try:
+            # the post parameters: m='submit', pass='...', gusewf='...' (file), certs='...'(file)
+            post_values = [('group_id', group_id)]
+            post_files = [('ligands', open(ligands, 'rb')),
+                          ('receptors', open(receptors, 'rb')),
+                          ('configs', open(configs, 'rb')),
+                          ('results', open(results, 'rb'))]
+            
+            r = requests.post(url, files=post_files, data=post_values, verify=False)            
+            # get the HTTP response code, e.g. 200.
+            response_code = r.status_code 
+            if response_code != 200:
+                print('Response Code: %d' % response_code)
+            # eval is needed to understand that the response is a dict
+            return ast.literal_eval( r.text )
+        except requests.exceptions.RequestException, e:
+            # print the error code and message and raise the error again
+            print e
+            raise e    
+    
+    def MDRRconsult(self, inserted, results, ligands, query, thresholdVinaDocking, group_id, url):
+        """ Call MDRR-RestApi consult
+        
+        Arguments:        
+        inserted -- Boolean showing if the results have been inserted in the MDRR or not
+        results -- either the inserted_ids of already inserted results in the MDRR, or a .zip file with the Vina results
+        query -- the query to search the additional data source with, e.g. pubChemProperty + pubChemSign + pubChemPropertyValue as in molecular_mass<100
+        thresholdVinaDocking --
+        url -- the url of the MDRR server (or the full url to the RESTful API method e.g. http://localhost:8090/consult) 
+        group_id --
+        Returns:
+        The response of the server after assessing "good" docking results and filtering the ligands ased on the query 
+        
+        This method uses Requests to send a HTTP request to the MDRR at url
+            
+        Raises requests.exceptions.RequestException (prints the error code and error message on terminal beforehand)     
+        """
+        if not url.endswith("/consult"):
+            url = url + "/consult"
+        try:
+            # the post parameters: m='submit', pass='...', gusewf='...' (file), certs='...'(file)
+            if inserted:
+                post_values = [('group_id', group_id),                           
+                               ('inserted', str(inserted)),
+                               ('results', str(results)),
+                               ('thresholdVinaDocking', thresholdVinaDocking),
+                               ('query', str(query))]
+                post_files = []
+            else:
+                post_values = [('group_id', group_id),                           
+                               ('inserted', str(inserted)),
+                               ('thresholdVinaDocking', thresholdVinaDocking),
+                               ('query', str(query))]
+                post_files = [('results', open(results, 'rb')),
+                              ('ligands', open(ligands, 'rb'))]
+                
+            r = requests.post(url, files=post_files, data=post_values, verify=False)            
+            # get the HTTP response code, e.g. 200.
+            response_code = r.status_code 
+            if response_code != 200:
+                print('Response Code: %d' % response_code)
+                
+            return r.text
+        except requests.exceptions.RequestException, e:
+            # print the error code and message and raise the error again
+            print e
+            raise e    
+    
+    def MDRRverify(self, receptor, ligand, config, thresholdDeepAlign, thresholdLigsift, thresholdConfig, group_id, url):
+        """ Call MDRR-RestApi verify
+        
+        Arguments:        
+        receptors -- zip file of receptors
+        thresholdDeepAlign --
+        thresholdLigsift --
+        thresholdConfig --
+        url -- the url of the MDRR server (or the full url to the RESTful API method e.g. http://localhost:8090/verify) 
+        
+        Returns:
+        The response of the server after seeking for past results with similar receptor/ligand/config in order to verify one's docking and learn how to setup docking correctly 
+        
+        This method uses Requests to send a HTTP request to the MDRR at url
+            
+        Raises requests.exceptions.RequestException (prints the error code and error message on terminal beforehand)     
+        """
+        if not url.endswith("/verify"):
+            url = url + "/verify"
+        try:
+            # the post parameters: m='submit', pass='...', gusewf='...' (file), certs='...'(file)
+            post_values = [('group_id', group_id),                           
+                           ('thresholdDeepAlign', str(thresholdDeepAlign)),
+                           ('thresholdLigsift', str(thresholdLigsift)),
+                           ('thresholdConfig', str(thresholdConfig))]
+            post_files = [('receptor', open(receptor, 'rb')),
+                          ('ligand', open(ligand, 'rb')),
+                          ('config', open(config, 'rb'))]
+            
+            r = requests.post(url, files=post_files, data=post_values, verify=False)            
+            # get the HTTP response code, e.g. 200.
+            response_code = r.status_code 
+            
+            if response_code != 200:
+                print('Response Code: %d' % response_code)
+            return r.text
+        except requests.exceptions.RequestException, e:
+            # print the error code and message and raise the error again
+            print e
+            raise e
+        
+    def MDRRsuggestNext(self, receptors, thresholdDeepAlign, thresholdVinaDocking, group_id, url):
+        """ Call MDRR-RestApi insertMany
+        
+        Arguments:        
+        receptors -- zip file of receptors
+        thresholdDeepAlign --
+        thresholdVina --
+        url -- the url of the MDRR server (or the full url to the RESTful API method e.g. http://localhost:8090/suggestNext) 
+        
+        Returns:
+        The response of the server after seeking for a suggestion from similarity results and old docking results in the MDRR
+        
+        This method uses Requests to send a HTTP request to the MDRR at url
+            
+        Raises requests.exceptions.RequestException (prints the error code and error message on terminal beforehand)     
+        """
+        if not url.endswith("/suggestNext"):
+            url = url + "/suggestNext"
+        try:
+            # the post parameters: m='submit', pass='...', gusewf='...' (file), certs='...'(file)
+            post_values = [('group_id', group_id),
+                           ('thresholdVinaDocking', str(thresholdVinaDocking)),
+                           ('thresholdDeepAlign', str(thresholdDeepAlign))]
+            post_files = [('receptors', open(receptors, 'rb'))]
+            
+            r = requests.post(url, files=post_files, data=post_values, verify=False)            
+            # get the HTTP response code, e.g. 200.
+            response_code = r.status_code 
+            
+            if response_code != 200:
+                print('Response Code: %d' % response_code)
+            return r.text
+        except requests.exceptions.RequestException, e:
+            # print the error code and message and raise the error again
+            print e
+            raise e
+    
                  
     def processDetailsinfo(self, wfstatus, currentFolderNumber, totalNumberOfFolders):
         """ Process the output of the RemoteAPI method 'detailsinfo' and write messages for the user on the panel 
@@ -434,7 +601,9 @@ class gUseThread(threading.Thread):
         Based  on this value, if the workflow is running call processDetailsInfo, if it is finished call the RemoteApi 'download' method.
         Once finished remove id from wfidsDict, this method runs until this list is empty
         """
-
+        # json responses after inserting in the MDRR
+        mdrr_inserted = []
+        mdrr_decision = []
         # create group_id so all insersions and analysis can be tracked
         group_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S%Z-") + str(random.random())
         # folders to write the result file to (in the beginning the same as number of workflows)
@@ -460,13 +629,11 @@ class gUseThread(threading.Thread):
                 self.timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
                 # if there were no errors with RemoteAPI m='detailsinfo', process the result it returned
                 wfstate = self.processDetailsinfo(wfstatus, str(folderNumber), self.app.engine.guseNumberOfInstances.get())
-                
                 # value returned: 0 - suspended, or not valid data.
                 if wfstate == 0:
                     # remove the key-value (folderNumber-wfid) pair for that folder number from the dict and start over looping through the rest
                     del wfidsDict[folderNumber]
                     continue
-                
                 # value returned: 1 - finished, or error.
                 elif wfstate == 1:
                     # download the results into this file
@@ -502,7 +669,153 @@ class gUseThread(threading.Thread):
 #                         os.remove(temporary_folder + os.sep + output_zip_name_path)
 #                         last_separator = output_zip_name_path.rfind(os.sep)
 #                         os.removedirs(temporary_folder + os.sep + output_zip_name_path[0:last_separator])
+                        
+                        # if the user has given permission to upload the results to the MDRR, send a request to the insertMany RESTful API method 
+                        # Raccoon2 will always produce 1 config file and 1..* ligands, 1..* receptors (but usually 1), and respective results
+                        print "About to see if we should upload_to_MDRR"
+                        print self.app.engine.upload_to_MDRR.get()
+                         
+                        if self.app.engine.upload_to_MDRR.get() == 1:
+                            # results of each instance are stored in a separate folder
+                            # find all directories within the 'results' (these are named after receptor names - it is 1 directory if there is 1 receptor) 
+                            result_dirs = []
+                            for res in os.listdir(results_folder + os.sep + "results"):
+                                # if it is a subdirectory store it in result_dirs
+                                if os.path.isdir(results_folder + os.sep + "results" + os.sep + res):
+                                    result_dirs.append(res)
+                            
+                            # open a new zip file 'results.zip' and put all elements of each subfolder in it
+                            result_zip = ZipFile(self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "results.zip", 'w')                            
+                            for results in result_dirs:
+                                for result in os.listdir(results_folder + os.sep + "results" + os.sep + results):
+                                    result_zip.write(results_folder + os.sep + "results" + os.sep + results + os.sep + result, arcname = result)
+                            
+                            result_zip.close()
+                            print "About to call MDRRinsertMany()"
+                            # run the MDRR insertMany RESTAPI method, and store the json response in an array
+                            inserted = self.MDRRinsertMany(ligands = self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "ligands.zip", 
+                                                receptors = self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "receptors.zip", 
+                                                configs = self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "conf.txt", 
+                                                results = self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "results.zip",
+                                                group_id = group_id,                                                
+                                                url = self.app.engine.guseMdrrServerUrl.get() + "/insertMany")
+                            
+                            mdrr_inserted.append( inserted )
+                            
+                            
+                            if self.app.engine.MDRR_consult.get() == 1:
+                                print "About to call MDRRconstult() with inserted ids"
+                                
+                                mdrr_decision.append( bson.json_util.loads(
+                                                self.MDRRconsult(
+                                                    inserted = True,
+                                                    results = [ inserted_result["result_id"] for inserted_result in inserted["data"]["inserted_results"] ],
+                                                    ligands = None,
+                                                    query = self.app.engine.pubChemProperty.get() + " " + self.app.engine.pubChemSign.get() + " " +  self.app.engine.pubChemPropertyValue.get(),
+                                                    thresholdVinaDocking = self.app.engine.thresholdVinaDocking.get(),
+                                                    group_id = group_id,
+                                                    url = self.app.engine.guseMdrrServerUrl.get() + "/consult" ) 
+                                                    ) 
+                                                )
+                        
+                        else:
+                            if self.app.engine.MDRR_consult.get() == 1:
+                                print "About to callMDRRconsult() with file to convert"
+                                
+                                # results of each instance are stored in a separate folder
+                                # find all directories within the 'results' (these are named after receptor names - it is 1 directory if there is 1 receptor) 
+                                result_dirs = []
+                                for res in os.listdir(results_folder + os.sep + "results"):
+                                    # if it is a subdirectory store it in result_dirs
+                                    if os.path.isdir(results_folder + os.sep + "results" + os.sep + res):
+                                        result_dirs.append(res)
+                                
+                                # open a new zip file 'results.zip' and put all elements of each subfolder in it
+                                result_zip = ZipFile(self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "results.zip", 'w')                            
+                                for results in result_dirs:
+                                    for result in os.listdir(results_folder + os.sep + "results" + os.sep + results):
+                                        result_zip.write(results_folder + os.sep + "results" + os.sep + results + os.sep + result, arcname = result)                                
+                                result_zip.close()
+                                
+                                mdrr_decision.append( bson.json_util.loads( 
+                                                self.MDRRconsult(
+                                                    inserted = False,
+                                                    results = self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "results.zip",
+                                                    ligands = self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "ligands.zip",
+                                                    query = self.app.engine.pubChemProperty.get() + " " +  self.app.engine.pubChemSign.get() + " " +  self.app.engine.pubChemPropertyValue.get(),
+                                                    thresholdVinaDocking = self.app.engine.thresholdVinaDocking.get(),
+                                                    group_id = group_id,
+                                                    url = self.app.engine.guseMdrrServerUrl.get() + "/consult" ) 
+                                                    ) 
+                                                )
+                                
+                            
+                        # if the user has asked to suggest the next ligand-receptor pair to dock, based on struct. align. of the target receptor (the receptor currently used),
+                        # send a request to the suggestSimilar RESTful API method 
+                        # this scenario assumes that only one receptor is used currently, but would function with several as well
+                        print "About to see if we should MDRR_suggest_next"
+                        print self.app.engine.MDRR_suggest_next.get()
+                        
+                        if self.app.engine.MDRR_suggest_next.get() == 1:
+                            print "About to call MDRRsuggestNext()"                            
+                            # run the MDRR suggestNext RESTAPI method, and store the json response in an array
+                            mdrr_decision.append( bson.json_util.loads(
+                                                                self.MDRRsuggestNext(
+                                                                    receptors = self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "receptors.zip",
+                                                                    thresholdDeepAlign = self.app.engine.thresholdDeepAlign.get(),
+                                                                    thresholdVinaDocking = self.app.engine.thresholdVinaDocking.get(),
+                                                                    group_id = group_id,
+                                                                    url = self.app.engine.guseMdrrServerUrl.get() + "/suggestNext") 
+                                                                    ) 
+                                                                )
+                            
+                            # set the value of suggest next to false (0) because this needs to happen only once, with the receptor only. 
+                            # It's expected that the same receptor will be in the receptors.zip inside any of the result/filesX/ folder. 
+                            # If this is not the case, this needs to be moved and run elsewhere
+                            self.app.engine.MDRR_suggest_next.set(0)
+                            
+                        
+                        # if the user has asked to suggest the next ligand-receptor pair to dock, based on struct. align. of the target receptor (the receptor currently used),
+                        # send a request to the suggestSimilar RESTful API method 
+                        # this scenario assumes that only one receptor is used currently, but would function with several as well
+                        print "About to see if we should MDRR_verify"
+                        print self.app.engine.MDRR_verify.get()
+                        
+                        if self.app.engine.MDRR_verify.get() == 1:
+                            print "About to call MDRRverify()"                            
+                            # run the MDRR suggestNext RESTAPI method, and store the json response in an array
+                            mdrr_decision.append( bson.json_util.loads( self.MDRRverify(receptor = self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "receptors.zip",
+                                                            ligand = self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "ligands.zip",
+                                                            config = self.resultFolderName + os.sep + "instance_" + str(folderNumber) + os.sep + "conf.txt",
+                                                            thresholdDeepAlign = self.app.engine.thresholdDeepAlign.get(),
+                                                            thresholdLigsift = self.app.engine.thresholdLigsift.get(),
+                                                            thresholdConfig = self.app.engine.thresholdConfig.get(),
+                                                            group_id = group_id,
+                                                            url = self.app.engine.guseMdrrServerUrl.get() + "/verify") ) )
+                                                   
                                    
+                    
+                    mdrr_all_decisions = None
+                    for decision in mdrr_decision:
+                        if mdrr_all_decisions == None:
+                            mdrr_all_decisions = decision["data"]
+                        else:
+                            mdrr_all_decisions["decisions"] = mdrr_all_decisions["decisions"] + decision["data"]["decisions"]
+                    
+                    if mdrr_all_decisions:         
+                        # store all responses in json format in one file
+                        with open("MDRR_decision.json", 'w') as json_responses_file:
+                            json_responses_file.write('{"data":')
+                            json_responses_file.write(json.dumps(mdrr_all_decisions))
+                            json_responses_file.write('}')
+                    
+                    # store all responses in json format in one file
+                    with open("MDRR_responses.json", 'w') as json_responses_file:
+                        json_responses_file.write('{"results":')
+                        json_responses_file.write(json.dumps(mdrr_inserted))
+                        json_responses_file.write("}")
+                    
+                    
                     # maybe remove all input files including results.zip too (*leave for now*)    
                     #os.remove("../ligands.zip")
                     #os.remove("../receptors.zip")
@@ -510,7 +823,7 @@ class gUseThread(threading.Thread):
                     #os.remove("../output_names.txt")
                     #os.remove("../certs.zip")
                     
-                    # once downloaded, remove the element from the dict and continue the loop    
+                    # once downloaded, remove the element from the dict and continue the loop
                     del wfidsDict[folderNumber]
                     continue
                 # start processing the next workflow in 5 seconds

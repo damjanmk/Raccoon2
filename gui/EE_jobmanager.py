@@ -34,6 +34,13 @@ import CADD.Raccoon2
 import threading
 import Queue
 from DamjanGuseThread import gUseThread
+import uuid
+import ttk
+import json
+import tkFont
+import requests
+import bson.json_util 
+import ast
 
 import RaccoonBasics as rb
 import RaccoonEvents
@@ -97,6 +104,7 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         # attach listbox to scrollbar
         self.jobResultListbox.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=self.jobResultListbox.yview)
+        
         self.pgroup.pack(expand=1, fill='both', anchor='n', side='bottom')
 
     def initJobTree(self, event=None):
@@ -126,17 +134,259 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
             self.setClusterResource()
         elif resource == 'opal':
             self.setOpalResource()
-    #damjan begin
+        # damjan begin
         elif resource == 'guse':
             self.setGuseResource()
+    
+    
+    def j_tree(self, tree, parent, dic):
+        for key in sorted(dic.keys()):
+            uid = uuid.uuid4()
+            if isinstance(dic[key], dict):
+                tree.insert(parent, 'end', uid, text=key)
+                self.j_tree(tree, uid, dic[key])
+            elif isinstance(dic[key], tuple):
+                tree.insert(parent, 'end', uid, text=str(key) + '()')
+                self.j_tree(tree, uid,
+                       dict([(i, x) for i, x in enumerate(dic[key])]))
+            elif isinstance(dic[key], list):
+                tree.insert(parent, 'end', uid, text=str(key) + '[]')
+                self.j_tree(tree, uid,
+                       dict([(i, x) for i, x in enumerate(dic[key])]))
+            else:
+                value = dic[key]
+                if value == "":
+                    continue
+                                
+                if isinstance(value, str) or isinstance(value, unicode):
+                    if "$oid" in value:
+                        value = str( ast.literal_eval(value) ["$oid"] )
+                    else:
+                        value = value.strip().replace(' ', '_').replace('\t', '~')                
+                    
+                if "id" in key:
+                    tree.insert(parent, 'end', uid, text=key, value=value, tags="get_details_by_id")
+                elif "config_content" == key or "ligand_similarity_result" == key or "receptor_similarity_result" == key:
+                    tree.insert(parent, 'end', uid, text=key, value=value, tags="show_result_details")
+                else:
+                    tree.insert(parent, 'end', uid, text=key, value=value)
+    
+    def get_details_by_id(self, event):
+        current_iid = self.tree.focus()
+        item = self.tree.item(current_iid)
+        
+        key = item["text"]
+        values = item["values"]
+        value = values[0]
+        if "ligand_id" in key:        
+            if "temp" in value:
+                ligand_name = os.path.basename(value).split(".")[0]
+                print ligand_name
+                print self.app.ligand_source[0]["lib"].get_ligands()
+                for attached_ligand  in self.app.ligand_source[0]["lib"].get_ligands(): 
+                    if ligand_name in os.path.basename(attached_ligand).split(".")[0]:
+                        with open(attached_ligand, "r") as ligand_file:
+                            details = ligand_file.read() 
+            else:
+                try:
+                    # create new requests object
+                    r = requests.get(self.app.engine.guseMdrrServerUrl.get() + "/ligand", params= [("_id", value)] )            
+                    # get the HTTP response code, e.g. 200.
+                    response_code = r.status_code 
+                    if response_code == 200:
+                        details = bson.json_util.loads ( str( r.text ) )
+                except requests.exceptions.RequestException, e:
+                    # print the error code and message and raise the error again
+                    print e
+                    raise e
+        elif "ligand_structure_id" in key:                    
+            try:
+                # create new requests object
+                r = requests.get(self.app.engine.guseMdrrServerUrl.get() + "/ligand", params= [("structure_id", value)] )            
+                # get the HTTP response code, e.g. 200.
+                response_code = r.status_code 
+                if response_code == 200:
+                    details = bson.json_util.loads ( str( r.text ) )
+            except requests.exceptions.RequestException, e:
+                # print the error code and message and raise the error again
+                print e
+                raise e
+        elif "receptor_id" in key:
+            try:
+                # create new requests object
+                r = requests.get(self.app.engine.guseMdrrServerUrl.get() + "/receptor", params= [("_id", value)] )            
+                # get the HTTP response code, e.g. 200.
+                response_code = r.status_code 
+                if response_code == 200:
+                    details = bson.json_util.loads ( str( r.text ) )
+            except requests.exceptions.RequestException, e:
+                # print the error code and message and raise the error again
+                print e
+                raise e
+        elif "receptor_structure_id" in key:
+            try:
+                # create new requests object
+                r = requests.get(self.app.engine.guseMdrrServerUrl.get() + "/receptor", params= [("structure_id", value)] )            
+                # get the HTTP response code, e.g. 200.
+                response_code = r.status_code 
+                if response_code == 200:
+                    details = bson.json_util.loads ( str( r.text ) )
+            except requests.exceptions.RequestException, e:
+                # print the error code and message and raise the error again
+                print e
+                raise e
+        elif "result_id" in key:
+            try:
+                # create new requests object
+                r = requests.get(self.app.engine.guseMdrrServerUrl.get() + "/result", params= [("_id", value)] )            
+                # get the HTTP response code, e.g. 200.
+                response_code = r.status_code 
+                if response_code == 200:
+                    details = bson.json_util.loads ( str( r.text ).strip("\n") )
+            except requests.exceptions.RequestException, e:
+                # print the error code and message and raise the error again
+                print e
+                raise e
+        self.tree_frame.forget(self.MDRRdetailsText)
+        self.MDRRdetailsText.pack_forget()
+        self.MDRRdetailsText = tk.Text(self.tree_frame)
+        self.MDRRdetailsText.insert(tk.END, self.recursive_print( details ) )
+        self.MDRRdetailsText.config(state=tk.DISABLED, height="10")
+        self.MDRRdetailsText.pack(fill=tk.BOTH, expand=0)
+        self.tree_frame.add(self.MDRRdetailsText)
+        
+    def recursive_print(self, iterable_variable, depth=0):
+        to_return =  ""
+        try:
+            if isinstance(iterable_variable, unicode):
+                iterable_variable = ast.literal_eval(iterable_variable)
+                
+            if isinstance(iterable_variable, dict):
+                for (k, v) in iterable_variable.items():
+                    if isinstance(v, unicode):
+                        v = ast.literal_eval(v)
+                        
+                    if isinstance(v, dict):
+                        to_return += "\n" + k + self.recursive_print(v, depth + 1)
+                    elif isinstance(v, list):
+                        to_return += "\n" + "\t" * depth + k.strip() + self.recursive_print(v, depth + 1)
+                    else:
+                        to_return += "\n" + "\t" * depth + k.strip() + "\n" + "\t" * (depth + 1) + str(v).strip()
+            
+            elif isinstance(iterable_variable, list):            
+                for list_item in iterable_variable:
+                    if isinstance(list_item, unicode):
+                        list_item = ast.literal_eval(list_item)
+                        
+                    if isinstance(list_item, dict):
+                        to_return += "\n" + self.recursive_print(list_item, depth + 1)
+                    elif isinstance(list_item, list):
+                        to_return += "\n" + self.recursive_print(list_item, depth + 1)
+                    else:
+                        to_return += "\n" + "\t" * depth + str(list_item).strip()
+                        
+            else: 
+                to_return += "\n" + "\t" * depth + str(iterable_variable).strip()
+        except Exception, e:
+            print "The value is: ", v
+            print e.args
+            print e.msg
+            raise e            
+        return to_return
+        
+    def show_result_details(self, event):
+        current_iid = self.tree.focus()
+        item = self.tree.item(current_iid)        
+        values = item["values"]        
+        value = ""
+        for v in values:
+            v = v.replace('_', ' ').replace('~', '\t')
+            value += "\n" + str( v )
+        self.tree_frame.forget(self.MDRRdetailsText)
+        self.MDRRdetailsText.pack_forget()
+        self.MDRRdetailsText = tk.Text(self.tree_frame)
+        self.MDRRdetailsText.insert(tk.END, value.strip("\n"))
+        self.MDRRdetailsText.config(state=tk.DISABLED, height="10")
+        self.MDRRdetailsText.pack(fill=tk.BOTH, expand=0) 
+        self.tree_frame.add(self.MDRRdetailsText)
+        
+    def tk_tree_view(self, data):
+        
+        if hasattr(self, 'tree') and hasattr(self, 'MDRRdetailsText') and hasattr(self, 'tree_frame'):
+            self.tree.pack_forget()
+            self.MDRRdetailsText.pack_forget()
+            self.tree_frame.pack_forget()
+        
+        # Setup the Frames
+        parent_frame = self.pgroup.interior()
+        self.tree_frame = tk.PanedWindow(parent_frame)
+        self.tree_frame.pack(fill=tk.BOTH, expand=1)
+        
+        default_font = tkFont.Font(font="TkDefaultFont").actual()         
+        style = ttk.Style(self.parent)
+        style.configure('Treeview', rowheight=18, font=(default_font['family'], default_font['size']), foreground="black" )
+        # Setup the Tree
+        self.tree = ttk.Treeview(self.tree_frame, columns=('Values'), style="Treeview", height=4)
+        self.tree.column('Values', width=100, anchor='center')
+        self.tree.heading('Values', text='Values')
+        
+        self.j_tree(self.tree, '', data)
+
+        self.tree.tag_configure( "get_details_by_id", font=(default_font['family'], default_font['size'], "underline"), foreground="blue" )
+        self.tree.tag_configure( "show_result_details", font=(default_font['family'], default_font['size'], "underline"), foreground="blue" )
+        
+        self.tree.tag_bind( "get_details_by_id", "<ButtonRelease-1>", callback=self.get_details_by_id)
+        self.tree.tag_bind( "show_result_details", "<ButtonRelease-1>", callback=self.show_result_details)
+
+        self.tree.pack(fill=tk.BOTH, expand=1)
+        self.tree_frame.add(self.tree)
+        
+        self.MDRRdetailsText = tk.Text(self.tree_frame)
+        self.MDRRdetailsText.config(height="10")
+        self.MDRRdetailsText.pack(fill=tk.BOTH, expand=0)
+        self.tree_frame.add(self.MDRRdetailsText)
+    
+    def on_scenario_option_change(self, *args):
+        if self.selected_scenario.get() == "Scenario 1":
+            self.scenario_raccoon2_frame.grid_forget()
+            self.scenario2_frame.grid_forget()
+            self.scenario4_frame.grid_forget()
+            self.scenario1_frame.grid(row=9, column=1, columnspan=2, sticky='e', padx=5, pady=1)    
+            self.app.engine.MDRR_suggest_next.set(1)
+            self.app.engine.MDRR_consult.set(0)
+            self.app.engine.MDRR_verify.set(0)        
+        elif self.selected_scenario.get() == "Scenario 2":
+            self.scenario_raccoon2_frame.grid_forget()
+            self.scenario1_frame.grid_forget()
+            self.scenario4_frame.grid_forget()
+            self.scenario2_frame.grid(row=9, column=1, columnspan=2, sticky='e', padx=5, pady=1)
+            self.app.engine.MDRR_consult.set(1)
+            self.app.engine.MDRR_suggest_next.set(0)
+            self.app.engine.MDRR_verify.set(0)
+        elif self.selected_scenario.get() == "Scenario 4":
+            self.scenario_raccoon2_frame.grid_forget()
+            self.scenario1_frame.grid_forget()
+            self.scenario2_frame.grid_forget()
+            self.scenario4_frame.grid(row=9, column=1, columnspan=2, sticky='e', padx=5, pady=1)
+            self.app.engine.MDRR_verify.set(1)
+            self.app.engine.MDRR_consult.set(0)
+            self.app.engine.MDRR_suggest_next.set(0)            
+        else:
+            self.scenario1_frame.grid_forget()
+            self.scenario2_frame.grid_forget()
+            self.scenario4_frame.grid_forget()
+            self.scenario_raccoon2_frame.grid(row=9, column=1, columnspan=2, sticky='e', padx=5, pady=1)
+            self.app.engine.MDRR_consult.set(0)
+            self.app.engine.MDRR_suggest_next.set(0)
+            self.app.engine.MDRR_verify.set(0)
     
     def setGuseResource(self):
         self._buildjobscrollbar()
         self.resetFrame()
+        
         self.group = Pmw.Group(self.frame, tag_text = 'gUSE submission requirements', tag_font=self.FONTbold)
         f = self.group.interior()
         #f.configure(bg='red')
-
         lwidth = 20
         rwidth = 60
         lbg = '#ffffff'
@@ -163,7 +413,114 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         self.reqConf.grid(row=7,column=2, sticky='w', pady=1)
         cb = CallbackFunction(self.switchtab, 'Config')
         self.reqConf.bind('<Button-1>', cb)
-
+        
+        
+        
+        scenario_options = ["Raccoon2 Only", "Scenario 1", "Scenario 2", "Scenario 4"]
+        
+        self.selected_scenario = tk.StringVar()
+        self.selected_scenario.set( scenario_options[0] )
+        
+        tk.Label(f, text='Select Scenario', width=lwidth, font=self.FONT,anchor='e').grid(row=8, column=1,sticky='e',padx=5, pady=1)
+        tk.OptionMenu(f, self.selected_scenario, *scenario_options, command=self.on_scenario_option_change).grid(row=8, column=2, sticky='w', padx=5, pady=1)
+        
+        
+        
+        self.app.engine.upload_to_MDRR = tk.IntVar()
+        self.app.engine.MDRR_suggest_next = tk.IntVar()
+        self.app.engine.MDRR_verify = tk.IntVar()
+        self.app.engine.MDRR_consult = tk.IntVar()
+        
+        self.app.engine.thresholdDeepAlign = tk.DoubleVar()
+        self.app.engine.thresholdVinaDocking = tk.DoubleVar()
+        self.app.engine.thresholdLigsift = tk.DoubleVar()
+        self.app.engine.thresholdConfig = tk.DoubleVar()
+        self.app.engine.pubChemProperty = tk.StringVar()
+        self.app.engine.pubChemSign = tk.StringVar()
+        self.app.engine.pubChemPropertyValue = tk.StringVar()
+        
+        # set the MDRR checkbox to checked by default
+        self.app.engine.upload_to_MDRR.set(1)
+        
+        # set default values for the thresholds
+        self.app.engine.thresholdDeepAlign.set(777.0)
+        self.app.engine.thresholdVinaDocking.set(-6.8)
+        self.app.engine.thresholdLigsift.set(0.6)
+        self.app.engine.thresholdConfig.set(9.99)
+        self.app.engine.pubChemProperty.set("Complexity")
+        self.app.engine.pubChemPropertyValue.set("220")
+        
+        self.scenario_raccoon2_frame = tk.Frame(f)                
+        
+        # send to MDRR - the variable self.upload_to_MDRR should be used once the results are downloaded
+        tk.Label(self.scenario_raccoon2_frame, text='Upload to UoW MDRR', width=20,anchor='e').grid(row=1, column=1,sticky='e',padx=5, pady=1)
+        reqMDRR = tk.Checkbutton(self.scenario_raccoon2_frame, text = 'Send the results to the UoW Molecular Docking Result Repository', variable=self.app.engine.upload_to_MDRR)
+        reqMDRR.grid(row=1,column=2, sticky='w', pady=1)
+        self.scenario_raccoon2_frame.grid(row=9, column=1, columnspan=2, sticky='e', padx=5, pady=1)
+        
+        
+        self.scenario1_frame = tk.Frame(f)                
+        
+        # send to MDRR - the variable self.upload_to_MDRR should be used once the results are downloaded
+        tk.Label(self.scenario1_frame, text='Upload to UoW MDRR', width=20,anchor='e').grid(row=1, column=1,sticky='e',padx=5, pady=1)
+        reqMDRR = tk.Checkbutton(self.scenario1_frame, text = 'Send the results to the UoW Molecular Docking Result Repository', variable=self.app.engine.upload_to_MDRR)
+        reqMDRR.grid(row=1,column=2, sticky='w', pady=1)
+        
+        
+        # the threshold for DeepAlign
+        tk.Label(self.scenario1_frame, text='DeepScore Threshold', width=20,anchor='e').grid(row=5, column=1,sticky='e',padx=5, pady=1)
+        tk.Entry(self.scenario1_frame, textvariable=self.app.engine.thresholdDeepAlign, width=10).grid(row=5, column=2, padx=(10, 3), sticky=tk.W, ipady=3)
+        
+        # the threshold for assessing docking results
+        tk.Label(self.scenario1_frame, text='Vina Score Threshold', width=20,anchor='e').grid(row=7, column=1,sticky='e',padx=5, pady=1)
+        tk.Entry(self.scenario1_frame, textvariable=self.app.engine.thresholdVinaDocking, width=10).grid(row=7, column=2, padx=(10, 3), sticky=tk.W, ipady=3)
+             
+        
+        self.scenario2_frame = tk.Frame(f)                
+        
+        # send to MDRR - the variable self.upload_to_MDRR should be used once the results are downloaded
+        tk.Label(self.scenario2_frame, text='Upload to UoW MDRR', width=20,anchor='e').grid(row=1, column=1,sticky='e',padx=5, pady=1)
+        reqMDRR = tk.Checkbutton(self.scenario2_frame, text = 'Send the results to the UoW Molecular Docking Result Repository', variable=self.app.engine.upload_to_MDRR)
+        reqMDRR.grid(row=1,column=2, sticky='w', pady=1)
+        
+        
+        # the threshold for assessing docking results
+        tk.Label(self.scenario2_frame, text='Vina Score Threshold', width=20,anchor='e').grid(row=7, column=1,sticky='e',padx=5, pady=1)
+        tk.Entry(self.scenario2_frame, textvariable=self.app.engine.thresholdVinaDocking, width=10).grid(row=7, column=2, padx=(10, 3), sticky=tk.W, ipady=3)
+        
+        # PubChem
+        tk.Label(self.scenario2_frame, text='PubChem Property', width=20,anchor='e').grid(row=3, column=1,sticky='e',padx=5, pady=1)
+        pubChem_frame = tk.Frame(self.scenario2_frame)
+        tk.Entry(pubChem_frame, textvariable=self.app.engine.pubChemProperty, width=10).grid(row=0, column=0, padx=(10, 3), sticky=tk.W, ipady=3)
+        
+        pubChem_options = [">=", "<"] 
+        self.app.engine.pubChemSign.set(pubChem_options[0])
+        tk.OptionMenu(pubChem_frame, self.app.engine.pubChemSign, *pubChem_options).grid(row=0, column=1, sticky='e', padx=5, pady=1)
+        tk.Entry(pubChem_frame, textvariable=self.app.engine.pubChemPropertyValue, width=10).grid(row=0, column=2, padx=(10, 3), sticky=tk.W, ipady=3)
+        pubChem_frame.grid(row=3, column=2, padx=(10, 3), sticky=tk.W, ipady=3)
+                
+        self.scenario4_frame = tk.Frame(f)                
+        
+        # send to MDRR - the variable self.upload_to_MDRR should be used once the results are downloaded
+        tk.Label(self.scenario4_frame, text='Upload to UoW MDRR', width=20,anchor='e').grid(row=1, column=1,sticky='e',padx=5, pady=1)
+        reqMDRR = tk.Checkbutton(self.scenario4_frame, text = 'Send the results to the UoW Molecular Docking Result Repository', variable=self.app.engine.upload_to_MDRR)
+        reqMDRR.grid(row=1,column=2, sticky='w', pady=1)
+        
+        
+        # the threshold for DeepAlign
+        tk.Label(self.scenario4_frame, text='DeepScore Threshold', width=20,anchor='e').grid(row=5, column=1,sticky='e',padx=5, pady=1)
+        tk.Entry(self.scenario4_frame, textvariable=self.app.engine.thresholdDeepAlign, width=10).grid(row=5, column=2, padx=(10, 3), sticky=tk.W, ipady=3)
+        
+        # the threshold for Ligsift
+        tk.Label(self.scenario4_frame, text='Ligsift Threshold', width=20,anchor='e').grid(row=7, column=1,sticky='e',padx=5, pady=1)
+        tk.Entry(self.scenario4_frame, textvariable=self.app.engine.thresholdLigsift, width=10).grid(row=7, column=2, padx=(10, 3), sticky=tk.W, ipady=3)
+                
+        # the threshold for CompareConfig
+        tk.Label(self.scenario4_frame, text='Config Threshold', width=20,anchor='e').grid(row=9, column=1,sticky='e',padx=5, pady=1)
+        tk.Entry(self.scenario4_frame, textvariable=self.app.engine.thresholdConfig, width=10).grid(row=9, column=2, padx=(10, 3), sticky=tk.W, ipady=3)
+        
+        
+        
         # submission
         self.SubmitButton = tk.Button(f, text = 'Submit...', image=self._ICON_submit, 
             font=self.FONT, compound='left',state='normal', command=self.submit, **self.BORDER)
@@ -171,9 +528,11 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         
         self.group.pack(fill='none',side='top', anchor='w', ipadx=5, ipady=5)
 
-        self.frame.pack(expand=0, fill='x',anchor='n')
+        self.frame.pack(expand=0, fill='x',anchor='n')        
+        
         self._updateRequirementsGuse()
-    #damjan end 
+    
+#damjan end 
 
     def setLocalResource(self):
         #self.frame.pack_forget()
@@ -309,13 +668,21 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
             self.submit_opal(job_info)        
         self.app.setReady()
     
+    #damjan begin
     def periodiccall(self):
         self.checkqueue()
         if self.threadForGuse.is_alive():
             tk.Tk.after(self.app.parent, 100, self.periodiccall)
         else:
-            self.SubmitButton.config(state="active")
-
+            self.SubmitButton.config(state="active")    
+            if self.selected_scenario.get().startswith( "Scenario" ):
+                self.jobResultListbox.pack_forget()
+                self.jobResultListbox.config(height=5)
+                self.jobResultListbox.pack(fill=tk.BOTH, expand=0)        
+                with open("./MDRR_decision.json", "r") as file:
+                    data = json.load(file)["data"]
+                    self.tk_tree_view(data)
+            
     def checkqueue(self):
         while self.queue.qsize():
             try:
@@ -325,7 +692,9 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
             except Queue.Empty:
                 pass
     
-    def submit_guse(self):
+    def submit_guse(self):        
+        if self.selected_scenario.get() == "Scenario 1":
+            self.app.engine.MDRR_suggest_next.set(1)       
         self.queue = Queue.Queue()
         self.SubmitButton.config(state="disabled")
         self.threadForGuse = gUseThread(self.queue, self.app)
@@ -333,7 +702,8 @@ class JobManagerTab(rb.TabBase, rb.RaccoonDefaultWidget):
         self.threadForGuse.start()
         self.jobResultListbox.insert(tk.END, "Submitting...")        
         self.periodiccall()
-        
+    
+    #damjan end
     
     def submit_local(self, job_info):
         """ manage submission and feedback from local resource"""
