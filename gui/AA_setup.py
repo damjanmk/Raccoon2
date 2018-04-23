@@ -548,7 +548,8 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
             self.f1.pack(side='left', anchor='n', expand=0, fill='none')
             self.guseAuthenticationType.set("Basic")
             self.app.guse = self.guseChooser.getvalue()
-
+            
+            self.app.engine.guseNumberOfInstances.set("1") # if nothing is selected in the instances listbox, default to 1 instance
         self.app.setReady()
     
 #damjan end
