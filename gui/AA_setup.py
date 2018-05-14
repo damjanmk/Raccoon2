@@ -320,6 +320,9 @@ class SetupTab(rb.TabBase, rb.RaccoonDefaultWidget):
         """ create the panels containing all info about
             the gUSE configuration
         """
+        # to be used in DamjanGuseThread.py
+        self.app.engine.guseMdrrServerUrl = tk.StringVar()
+        
         ### info panel
         group = Pmw.Group(self.frame, tag_text = 'gUSE', tag_font=self.FONTbold)
         g = group.interior()
